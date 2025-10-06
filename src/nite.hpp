@@ -1,0 +1,408 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <memory>
+#include <variant>
+
+namespace nite
+{
+    /**
+     * The base error class
+     */
+    class NiteError : public std::runtime_error {
+      public:
+        explicit NiteError(const std::string &msg) : runtime_error(msg) {}
+    };
+
+    /**
+     * Indicates out of range error
+     */
+    class RangeError : public NiteError {
+      public:
+        explicit RangeError() : NiteError("out of range") {}
+    };
+
+    /**
+     * Indicates out of memory
+     */
+    class OutOfMemoryError : public NiteError {
+      public:
+        explicit OutOfMemoryError() : NiteError("out of memory") {}
+    };
+
+    /**
+     * Indicates some type of console error
+     */
+    class ConsoleError : public NiteError {
+      public:
+        explicit ConsoleError(const std::string &msg) : NiteError(msg) {}
+    };
+
+    struct Color {
+        uint8_t r = 0, g = 0, b = 0;
+
+        constexpr static Color from_rgb(const uint8_t r, const uint8_t g, const uint8_t b) {
+            return Color{.r = r, .g = g, .b = b};
+        }
+
+        constexpr static Color from_hex(const uint32_t hex) {
+            // hex is encoded as 0x00rrggbb
+            return Color{.r = static_cast<uint8_t>((hex >> 16) & 0xFF),
+                         .g = static_cast<uint8_t>((hex >> 8) & 0xFF),
+                         .b = static_cast<uint8_t>((hex >> 0) & 0xFF)};
+        }
+
+        constexpr Color inverse() const {
+            return Color{.r = static_cast<uint8_t>(255 - r), .g = static_cast<uint8_t>(255 - g), .b = static_cast<uint8_t>(255 - b)};
+        }
+
+        constexpr bool operator==(const Color &other) const {
+            return r == other.r && g == other.g && b == other.b;
+        }
+
+        constexpr bool operator!=(const Color &other) const {
+            return !(*this == other);
+        }
+    };
+
+    static const uint8_t STYLE_RESET = 0b0001;
+    static const uint8_t STYLE_BOLD = 0b0010;
+    static const uint8_t STYLE_UNDERLINE = 0b0100;
+    static const uint8_t STYLE_INVERSE = 0b1000;
+
+    struct Style {
+        Color bg = Color::from_hex(0x000000);
+        Color fg = Color::from_hex(0xffffff);
+        uint8_t mode = STYLE_RESET;
+
+        constexpr Style reverse() const {
+            return Style{.bg = fg, .fg = bg, .mode = mode};
+        }
+
+        constexpr Style inverse() const {
+            return Style{.bg = bg.inverse(), .fg = fg.inverse(), .mode = mode};
+        }
+
+        constexpr bool operator==(const Style &other) const {
+            return bg == other.bg && fg == other.fg && mode == other.mode;
+        }
+
+        constexpr bool operator!=(const Style &other) const {
+            return !(*this == other);
+        }
+    };
+
+    struct Position {
+        union {
+            struct {
+                size_t x;
+                size_t y;
+            };
+
+            struct {
+                size_t col = 0;
+                size_t row = 0;
+            };
+        };
+
+        constexpr bool operator==(const Position &other) const {
+            return x == other.x && y == other.y;
+        }
+
+        constexpr bool operator!=(const Position &other) const {
+            return !(*this == other);
+        }
+    };
+
+    struct Size {
+        size_t width = 0;
+        size_t height = 0;
+
+        constexpr bool operator==(const Size &other) const {
+            return width == other.width && height == other.height;
+        }
+
+        constexpr bool operator!=(const Size &other) const {
+            return !(*this == other);
+        }
+    };
+
+    namespace internal
+    {
+        namespace console
+        {
+            bool is_tty();
+            bool clear();
+            bool size(size_t &width, size_t &height);
+            bool print(const std::string &text);
+            void set_style(const Style style);
+            void gotoxy(const size_t col, const size_t row);
+            void set_cell(const size_t col, const size_t row, const wchar_t value, const Style style);
+
+            bool init();
+            bool restore();
+        };    // namespace console
+
+        struct Cell {
+            wchar_t value = ' ';
+            Style style = {};
+
+            constexpr bool operator==(const Cell &other) const {
+                return value == other.value && style == other.style;
+            }
+
+            constexpr bool operator!=(const Cell &other) const {
+                return !(*this == other);
+            }
+        };
+
+        class CellBuffer {
+            size_t width;
+            size_t height;
+            Cell *cells;
+
+          public:
+            CellBuffer(size_t width, size_t height) : width(width), height(height) {
+                cells = new Cell[width * height]{};
+            }
+
+            CellBuffer(const Size &size) : width(size.width), height(size.height) {
+                cells = new Cell[size.width * size.height];
+            }
+
+            CellBuffer(const CellBuffer &other) : width(other.width), height(other.height) {
+                const size_t new_length = width * height;
+                cells = new Cell[new_length];
+                for (size_t i = 0; i < new_length; i++) {
+                    cells[i] = other.cells[i];
+                }
+            }
+
+            CellBuffer(CellBuffer &&other) : width(other.width), height(other.height), cells(other.cells) {
+                other.cells = nullptr;
+            }
+
+            CellBuffer &operator=(const CellBuffer &other) {
+                width = other.width;
+                height = other.height;
+
+                const size_t new_length = width * height;
+                delete[] cells;
+                cells = new Cell[new_length];
+                for (size_t i = 0; i < new_length; i++) {
+                    cells[i] = other.cells[i];
+                }
+                return *this;
+            }
+
+            CellBuffer &operator=(CellBuffer &&other) {
+                width = other.width;
+                height = other.height;
+                cells = other.cells;
+
+                other.cells = nullptr;
+                return *this;
+            }
+
+            ~CellBuffer() {
+                delete[] cells;
+            }
+
+            const Cell &at(size_t col, size_t row) const {
+                return cells[row * width + col];
+            }
+
+            const Cell &at(const Position &pos) const {
+                return cells[pos.row * width + pos.col];
+            }
+
+            Cell &at(size_t col, size_t row) {
+                return cells[row * width + col];
+            }
+
+            Cell &at(const Position &pos) {
+                return cells[pos.row * width + pos.col];
+            }
+
+            size_t get_width() const {
+                return width;
+            }
+
+            size_t get_height() const {
+                return height;
+            }
+
+            Size size() const {
+                return Size{.width = width, .height = height};
+            }
+        };
+    }    // namespace internal
+
+    struct State {
+        struct StateImpl;
+        std::unique_ptr<StateImpl> impl;
+
+        State(std::unique_ptr<StateImpl> impl);
+
+        State() = delete;
+        State(const State &) = delete;
+        State(State &&) = delete;
+        State &operator==(const State &) = delete;
+        State &operator==(State &&) = delete;
+    };
+
+    State &GetState();
+
+    Size GetBufferSize(State &state);
+    Size GetWindowSize();
+    bool ShouldWindowClose(State &state);
+
+    bool Initialize(State &state);
+    bool Cleanup();
+
+    void BeginDrawing(State &state);
+    void EndDrawing(State &state);
+    void CloseWindow(State &state);
+
+    constexpr const uint8_t KEY_SHIFT = 1 << 0;    // Shift key
+    constexpr const uint8_t KEY_CTRL = 1 << 1;     // Control on macOS, Ctrl on other platforms
+    constexpr const uint8_t KEY_ALT = 1 << 2;      // Option on macOS, Alt on other platforms
+    constexpr const uint8_t KEY_SUPER = 1 << 3;    // Command on macOS, Win key on Windows, Super on other platforms
+    constexpr const uint8_t KEY_META = 1 << 4;     // Meta key
+
+    enum class KeyCode {
+        // Alphabet keys
+        K_A,
+        K_B,
+        K_C,
+        K_D,
+        K_E,
+        K_F,
+        K_G,
+        K_H,
+        K_I,
+        K_J,
+        K_K,
+        K_L,
+        K_M,
+        K_N,
+        K_O,
+        K_P,
+        K_Q,
+        K_R,
+        K_S,
+        K_T,
+        K_U,
+        K_V,
+        K_W,
+        K_X,
+        K_Y,
+        K_Z,
+        // Number keys
+        K_0,
+        K_1,
+        K_2,
+        K_3,
+        K_4,
+        K_5,
+        K_6,
+        K_7,
+        K_8,
+        K_9,
+        // Function keys
+        F1,
+        F2,
+        F3,
+        F4,
+        F5,
+        F6,
+        F7,
+        F8,
+        F9,
+        F10,
+        F11,
+        F12,
+        F13,
+        F14,
+        F15,
+        F16,
+        F17,
+        F18,
+        F19,
+        F20,
+        F21,
+        F22,
+        F23,
+        F24,
+        // Special keys
+        BACKSPACE,
+        ENTER,
+        LEFT,
+        RIGHT,
+        UP,
+        DOWN,
+        HOME,
+        END,
+        PAGE_UP,
+        PAGE_DOWN,
+        TAB,
+        INSERT,
+        DELETE,
+        ESCAPE,
+    };
+
+    struct KeyEvent {
+        bool key_down;
+        KeyCode key_code;
+        char key_char;
+        uint8_t modifiers;
+    };
+
+    enum class MouseEventKind {
+        DOWN,
+        UP,
+        MOVED,
+        SCROLL_DOWN,
+        SCROLL_UP,
+        SCROLL_LEFT,
+        SCROLL_RIGHT,
+    };
+
+    enum class MouseButton {
+        NONE,
+        LEFT,
+        RIGHT,
+    };
+
+    struct MouseEvent {
+        MouseEventKind kind;
+        MouseButton button;
+        Position pos;
+        uint8_t modifiers;
+    };
+
+    struct FocusEvent {
+        bool focus_gained;
+    };
+
+    struct ResizeEvent {
+        Size size;
+    };
+
+    using Event = std::variant<KeyEvent, MouseEvent, FocusEvent, ResizeEvent>;
+
+    bool PollEvent(Event &event);
+
+    struct TextInfo {
+        std::string text = "";
+        Position pos = {};
+        Size size = {};
+        Style style = {};
+    };
+
+    void Text(State &state, TextInfo info = {});
+    // void
+}    // namespace nite
