@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstddef>
 #include <cwchar>
 #include <format>
@@ -122,6 +123,84 @@ namespace nite
 
     void CloseWindow(State &state) {
         state.impl->closed = true;
+    }
+
+    void SetCell(State &state, wchar_t value, const Position position, const Style style) {
+        state.impl->set_cell(position.col, position.row, value, style);
+    }
+
+    void FillCells(State &state, wchar_t value, const Position pos1, const Position pos2, const Style style) {
+        const size_t col_start = std::min(pos1.col, pos2.col);
+        const size_t col_end = std::max(pos1.col, pos2.col);
+        const size_t row_start = std::min(pos1.row, pos2.row);
+        const size_t row_end = std::max(pos1.row, pos2.row);
+
+        for (size_t row = row_start; row < row_end; row++)
+            for (size_t col = col_start; col < col_end; col++)
+                state.impl->set_cell(col, row, value, style);
+    }
+
+    void FillCells(State &state, wchar_t value, const Position pos, const Size size, const Style style) {
+        const size_t col_start = pos.col;
+        const size_t col_end = pos.col + size.width;
+        const size_t row_start = pos.row;
+        const size_t row_end = pos.col + size.height;
+
+        for (size_t row = row_start; row < row_end; row++)
+            for (size_t col = col_start; col < col_end; col++)
+                state.impl->set_cell(col, row, value, style);
+    }
+
+    void FillBackground(State &state, const Position pos1, const Position pos2, const Color color) {
+        const size_t col_start = std::min(pos1.col, pos2.col);
+        const size_t col_end = std::max(pos1.col, pos2.col);
+        const size_t row_start = std::min(pos1.row, pos2.row);
+        const size_t row_end = std::max(pos1.row, pos2.row);
+
+        internal::CellBuffer &buffer = state.impl->swapchain.back();
+        for (size_t row = row_start; row < row_end; row++)
+            for (size_t col = col_start; col < col_end; col++)
+                if (buffer.contains(col, row))
+                    buffer.at(col, row).style.bg = color;
+    }
+
+    void FillBackground(State &state, const Position pos, const Size size, const Color color) {
+        const size_t col_start = pos.col;
+        const size_t col_end = pos.col + size.width;
+        const size_t row_start = pos.row;
+        const size_t row_end = pos.col + size.height;
+
+        internal::CellBuffer &buffer = state.impl->swapchain.back();
+        for (size_t row = row_start; row < row_end; row++)
+            for (size_t col = col_start; col < col_end; col++)
+                if (buffer.contains(col, row))
+                    buffer.at(col, row).style.bg = color;
+    }
+
+    void FillForeground(State &state, const Position pos1, const Position pos2, const Color color) {
+        const size_t col_start = std::min(pos1.col, pos2.col);
+        const size_t col_end = std::max(pos1.col, pos2.col);
+        const size_t row_start = std::min(pos1.row, pos2.row);
+        const size_t row_end = std::max(pos1.row, pos2.row);
+
+        internal::CellBuffer &buffer = state.impl->swapchain.back();
+        for (size_t row = row_start; row < row_end; row++)
+            for (size_t col = col_start; col < col_end; col++)
+                if (buffer.contains(col, row))
+                    buffer.at(col, row).style.fg = color;
+    }
+
+    void FillForeground(State &state, const Position pos, const Size size, const Color color) {
+        const size_t col_start = pos.col;
+        const size_t col_end = pos.col + size.width;
+        const size_t row_start = pos.row;
+        const size_t row_end = pos.col + size.height;
+
+        internal::CellBuffer &buffer = state.impl->swapchain.back();
+        for (size_t row = row_start; row < row_end; row++)
+            for (size_t col = col_start; col < col_end; col++)
+                if (buffer.contains(col, row))
+                    buffer.at(col, row).style.fg = color;
     }
 
     void Text(State &state, TextInfo info) {

@@ -249,6 +249,10 @@ namespace nite
                 delete[] cells;
             }
 
+            bool contains(size_t col, size_t row) const {
+                return col < width && row < height;
+            }
+
             const Cell &at(size_t col, size_t row) const {
                 return cells[row * width + col];
             }
@@ -355,6 +359,80 @@ namespace nite
      * @param state the console state to work on
      */
     void CloseWindow(State &state);
+
+    /**
+     * Sets a specific cell on the console window
+     * @param state the console state to work on
+     * @param value the cell text
+     * @param position the position of the cell
+     * @param style the style of the cell
+     */
+    void SetCell(State &state, wchar_t value, const Position position, const Style style = {});
+    /**
+     * Fills a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param state the console state to work on
+     * @param value the cell text
+     * @param pos1 the first position provided
+     * @param pos2 the second position provided
+     * @param style the style of the cell
+     */
+    void FillCells(State &state, wchar_t value, const Position pos1, const Position pos2, const Style style = {});
+    /**
+     * Fills a range of cells on the console window given the top_left position and size.
+     * Filling starts from (col, row) inclusive to (col+width, row+height) exclusive.
+     * @param state the console state to work on
+     * @param value the cell text
+     * @param pos the top left corner
+     * @param size the size of the range
+     * @param style the style of the cell
+     */
+    void FillCells(State &state, wchar_t value, const Position pos, const Size size, const Style style = {});
+    /**
+     * Fills the background of a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param state the console state to work on
+     * @param value the cell text
+     * @param pos1 the first position provided
+     * @param pos2 the second position provided
+     * @param style the style of the cell
+     */
+    void FillBackground(State &state, const Position pos1, const Position pos2, const Color color);
+    /**
+     * Fills the foreground of a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param state the console state to work on
+     * @param value the cell text
+     * @param pos1 the first position provided
+     * @param pos2 the second position provided
+     * @param style the style of the cell
+     */
+    void FillBackground(State &state, const Position pos, const Size size, const Color color);
+    /**
+     * Fills the background of a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param state the console state to work on
+     * @param value the cell text
+     * @param pos1 the first position provided
+     * @param pos2 the second position provided
+     * @param style the style of the cell
+     */
+    void FillForeground(State &state, const Position pos1, const Position pos2, const Color color);
+    /**
+     * Fills the foreground of a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param state the console state to work on
+     * @param value the cell text
+     * @param pos1 the first position provided
+     * @param pos2 the second position provided
+     * @param style the style of the cell
+     */
+    void FillForeground(State &state, const Position pos, const Size size, const Color color);
 
     struct TextInfo {
         std::string text = "";
