@@ -7,6 +7,10 @@
 #include <memory>
 #include <variant>
 
+// --------------------------------
+//  Error definitions
+// --------------------------------
+
 namespace nite
 {
     /**
@@ -40,7 +44,17 @@ namespace nite
       public:
         explicit ConsoleError(const std::string &msg) : NiteError(msg) {}
     };
+}    // namespace nite
 
+// --------------------------------
+//  Style definitions
+// --------------------------------
+
+namespace nite
+{
+    /**
+     * Represent a color in RGB format
+     */
     struct Color {
         uint8_t r = 0, g = 0, b = 0;
 
@@ -75,6 +89,9 @@ namespace nite
     static const uint8_t STYLE_UNDERLINE = 0b0100;
     static const uint8_t STYLE_INVERSE = 0b1000;
 
+    /**
+     * Represent the style of a cell
+     */
     struct Style {
         Color bg = Color::from_hex(0x000000);
         Color fg = Color::from_hex(0xffffff);
@@ -97,6 +114,9 @@ namespace nite
         }
     };
 
+    /**
+     * Represents the position of an object
+     */
     struct Position {
         union {
             struct {
@@ -119,6 +139,9 @@ namespace nite
         }
     };
 
+    /**
+     * Represents size of an object
+     */
     struct Size {
         size_t width = 0;
         size_t height = 0;
@@ -131,7 +154,14 @@ namespace nite
             return !(*this == other);
         }
     };
+}    // namespace nite
 
+// --------------------------------
+//  Library internal definitions
+// --------------------------------
+
+namespace nite
+{
     namespace internal
     {
         namespace console
@@ -148,6 +178,9 @@ namespace nite
             bool restore();
         };    // namespace console
 
+        /**
+         * Represents the information of a screen cell
+         */
         struct Cell {
             wchar_t value = ' ';
             Style style = {};
@@ -161,6 +194,9 @@ namespace nite
             }
         };
 
+        /**
+         * Represents a two dimensional array of cells which is used as screen buffer
+         */
         class CellBuffer {
             size_t width;
             size_t height;
@@ -242,7 +278,14 @@ namespace nite
             }
         };
     }    // namespace internal
+}    // namespace nite
 
+// --------------------------------
+//  Library definitions
+// --------------------------------
+
+namespace nite
+{
     struct State {
         struct StateImpl;
         std::unique_ptr<StateImpl> impl;
@@ -256,19 +299,84 @@ namespace nite
         State &operator==(State &&) = delete;
     };
 
+    /**
+     * Gets the size of the console window
+     * @return Size
+     */
+    Size GetWindowSize();
+    /**
+     * Returns the console state
+     * @return State& 
+     */
     State &GetState();
 
-    Size GetBufferSize(State &state);
-    Size GetWindowSize();
-    bool ShouldWindowClose(State &state);
-
+    /**
+     * Initializes the console and prepares all necessary components
+     * @param state the console state to work on
+     * @return true if operation succeeded
+     * @return false if operation failed
+     */
     bool Initialize(State &state);
+    /**
+     * Cleanups the console and restores the terminal state
+     * @param state the console state to work on
+     * @return true if operation succeeded
+     * @return false if operation failed
+     */
     bool Cleanup();
 
+    /**
+     * Returns the size of the console screen buffer for the current frame
+     * @param state the console state to work on
+     * @return Size 
+     */
+    Size GetBufferSize(State &state);
+    /**
+     * Returns whether the console window should be closed
+     * @param state the console state to work on
+     * @return true if window is closed
+     * @return false if window is not closed
+     */
+    bool ShouldWindowClose(State &state);
+
+    /**
+     * Creates and pushes a new screen buffer to the swapchain
+     * @param state the console state to work on
+     */
     void BeginDrawing(State &state);
+    /**
+     * Pops the latest frame from the swapchain and selectively renders 
+     * the screen buffer on the console window
+     * @param state the console state to work on
+     */
     void EndDrawing(State &state);
+    /**
+     * Closes the console window
+     * @param state the console state to work on
+     */
     void CloseWindow(State &state);
 
+    struct TextInfo {
+        std::string text = "";
+        Position pos = {};
+        Size size = {};
+        Style style = {};
+    };
+
+    /**
+     * Displays text on the console window
+     * @param state 
+     * @param info 
+     */
+    void Text(State &state, TextInfo info = {});
+}    // namespace nite
+
+// --------------------------------
+//  Event definitions
+// --------------------------------
+
+namespace nite
+{
     constexpr const uint8_t KEY_SHIFT = 1 << 0;    // Shift key
     constexpr const uint8_t KEY_CTRL = 1 << 1;     // Control on macOS, Ctrl on other platforms
     constexpr const uint8_t KEY_ALT = 1 << 2;      // Option on macOS, Alt on other platforms
@@ -665,14 +773,4 @@ namespace nite
     using Event = std::variant<KeyEvent, MouseEvent, FocusEvent, ResizeEvent>;
 
     bool PollEvent(Event &event);
-
-    struct TextInfo {
-        std::string text = "";
-        Position pos = {};
-        Size size = {};
-        Style style = {};
-    };
-
-    void Text(State &state, TextInfo info = {});
-    // void
 }    // namespace nite

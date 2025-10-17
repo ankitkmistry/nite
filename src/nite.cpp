@@ -18,18 +18,17 @@ namespace nite
         bool closed = false;
         std::queue<internal::CellBuffer> swapchain;
 
-        StateImpl() {}
-
-        void set_closed(bool closed) {
-            this->closed = closed;
-        }
-
-        bool is_closed() {
-            return closed;
-        }
+        StateImpl() = default;
 
         bool set_cell(const size_t col, const size_t row, wchar_t value, const Style style);
     };
+
+    Size GetWindowSize() {
+        Size size;
+        if (!internal::console::size(size.width, size.height))
+            return Size();
+        return size;
+    }
 
     State &GetState() {
         static State state{std::make_unique<State::StateImpl>()};
@@ -40,15 +39,8 @@ namespace nite
         return state.impl->swapchain.back().size();
     }
 
-    Size GetWindowSize() {
-        Size size;
-        if (!internal::console::size(size.width, size.height))
-            return Size();
-        return size;
-    }
-
     bool ShouldWindowClose(State &state) {
-        return state.impl->is_closed();
+        return state.impl->closed;
     }
 
     bool Initialize(State &state) {
@@ -57,7 +49,7 @@ namespace nite
         if (!internal::console::init())
             return false;
 
-        state.impl->set_closed(false);
+        state.impl->closed = false;
         return true;
     }
 
@@ -129,7 +121,7 @@ namespace nite
     }
 
     void CloseWindow(State &state) {
-        state.impl->set_closed(true);
+        state.impl->closed = true;
     }
 
     void Text(State &state, TextInfo info) {
