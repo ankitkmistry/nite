@@ -331,7 +331,7 @@ namespace nite::internal::console
 namespace nite
 {
     static bool get_key_mod(WORD virtual_key_code, uint8_t &key_mod);
-    static bool get_key_code(WORD virtual_key_code, KeyCode &key_code);
+    static bool get_key_code(WORD virtual_key_code, char key_char, KeyCode &key_code);
 
     bool PollEvent(Event &event) {
         // Console input handle
@@ -367,7 +367,7 @@ namespace nite
         case KEY_EVENT: {
             // Refer to: https://learn.microsoft.com/en-us/windows/console/key-event-record-str
             KEY_EVENT_RECORD info = record.Event.KeyEvent;
-            if (KeyCode key_code; get_key_code(info.wVirtualKeyCode, key_code)) {
+            if (KeyCode key_code; get_key_code(info.wVirtualKeyCode, info.uChar.AsciiChar, key_code)) {
                 // Handle key modifiers
                 uint8_t modifiers = 0;
                 if (info.dwControlKeyState & SHIFT_PRESSED)
@@ -513,243 +513,402 @@ namespace nite
         }
     }
 
-    static bool get_key_code(WORD virtual_key_code, KeyCode &key_code) {
-        switch (virtual_key_code) {
-        case 'A':
-            key_code = KeyCode::K_A;
-            return true;
-        case 'B':
-            key_code = KeyCode::K_B;
-            return true;
-        case 'C':
-            key_code = KeyCode::K_C;
-            return true;
-        case 'D':
-            key_code = KeyCode::K_D;
-            return true;
-        case 'E':
-            key_code = KeyCode::K_E;
-            return true;
-        case 'F':
-            key_code = KeyCode::K_F;
-            return true;
-        case 'G':
-            key_code = KeyCode::K_G;
-            return true;
-        case 'H':
-            key_code = KeyCode::K_H;
-            return true;
-        case 'I':
-            key_code = KeyCode::K_I;
-            return true;
-        case 'J':
-            key_code = KeyCode::K_J;
-            return true;
-        case 'K':
-            key_code = KeyCode::K_K;
-            return true;
-        case 'L':
-            key_code = KeyCode::K_L;
-            return true;
-        case 'M':
-            key_code = KeyCode::K_M;
-            return true;
-        case 'N':
-            key_code = KeyCode::K_N;
-            return true;
-        case 'O':
-            key_code = KeyCode::K_O;
-            return true;
-        case 'P':
-            key_code = KeyCode::K_P;
-            return true;
-        case 'Q':
-            key_code = KeyCode::K_Q;
-            return true;
-        case 'R':
-            key_code = KeyCode::K_R;
-            return true;
-        case 'S':
-            key_code = KeyCode::K_S;
-            return true;
-        case 'T':
-            key_code = KeyCode::K_T;
-            return true;
-        case 'U':
-            key_code = KeyCode::K_U;
-            return true;
-        case 'V':
-            key_code = KeyCode::K_V;
-            return true;
-        case 'W':
-            key_code = KeyCode::K_W;
-            return true;
-        case 'X':
-            key_code = KeyCode::K_X;
-            return true;
-        case 'Y':
-            key_code = KeyCode::K_Y;
-            return true;
-        case 'Z':
-            key_code = KeyCode::K_Z;
-            return true;
-        case VK_NUMPAD0:
-        case '0':
-            key_code = KeyCode::K_0;
-            return true;
-        case VK_NUMPAD1:
-        case '1':
-            key_code = KeyCode::K_1;
-            return true;
-        case VK_NUMPAD2:
-        case '2':
-            key_code = KeyCode::K_2;
-            return true;
-        case VK_NUMPAD3:
-        case '3':
-            key_code = KeyCode::K_3;
-            return true;
-        case VK_NUMPAD4:
-        case '4':
-            key_code = KeyCode::K_4;
-            return true;
-        case VK_NUMPAD5:
-        case '5':
-            key_code = KeyCode::K_5;
-            return true;
-        case VK_NUMPAD6:
-        case '6':
-            key_code = KeyCode::K_6;
-            return true;
-        case VK_NUMPAD7:
-        case '7':
-            key_code = KeyCode::K_7;
-            return true;
-        case VK_NUMPAD8:
-        case '8':
-            key_code = KeyCode::K_8;
-            return true;
-        case VK_NUMPAD9:
-        case '9':
-            key_code = KeyCode::K_9;
-            return true;
-        case VK_F1:
-            key_code = KeyCode::F1;
-            return true;
-        case VK_F2:
-            key_code = KeyCode::F2;
-            return true;
-        case VK_F3:
-            key_code = KeyCode::F3;
-            return true;
-        case VK_F4:
-            key_code = KeyCode::F4;
-            return true;
-        case VK_F5:
-            key_code = KeyCode::F5;
-            return true;
-        case VK_F6:
-            key_code = KeyCode::F6;
-            return true;
-        case VK_F7:
-            key_code = KeyCode::F7;
-            return true;
-        case VK_F8:
-            key_code = KeyCode::F8;
-            return true;
-        case VK_F9:
-            key_code = KeyCode::F9;
-            return true;
-        case VK_F10:
-            key_code = KeyCode::F10;
-            return true;
-        case VK_F11:
-            key_code = KeyCode::F11;
-            return true;
-        case VK_F12:
-            key_code = KeyCode::F12;
-            return true;
-        case VK_F13:
-            key_code = KeyCode::F13;
-            return true;
-        case VK_F14:
-            key_code = KeyCode::F14;
-            return true;
-        case VK_F15:
-            key_code = KeyCode::F15;
-            return true;
-        case VK_F16:
-            key_code = KeyCode::F16;
-            return true;
-        case VK_F17:
-            key_code = KeyCode::F17;
-            return true;
-        case VK_F18:
-            key_code = KeyCode::F18;
-            return true;
-        case VK_F19:
-            key_code = KeyCode::F19;
-            return true;
-        case VK_F20:
-            key_code = KeyCode::F20;
-            return true;
-        case VK_F21:
-            key_code = KeyCode::F21;
-            return true;
-        case VK_F22:
-            key_code = KeyCode::F22;
-            return true;
-        case VK_F23:
-            key_code = KeyCode::F23;
-            return true;
-        case VK_F24:
-            key_code = KeyCode::F24;
-            return true;
-        case VK_BACK:
-            key_code = KeyCode::BACKSPACE;
-            return true;
-        case VK_RETURN:
-            key_code = KeyCode::ENTER;
-            return true;
-        case VK_LEFT:
-            key_code = KeyCode::LEFT;
-            return true;
-        case VK_RIGHT:
-            key_code = KeyCode::RIGHT;
-            return true;
-        case VK_UP:
-            key_code = KeyCode::UP;
-            return true;
-        case VK_DOWN:
-            key_code = KeyCode::DOWN;
-            return true;
-        case VK_HOME:
-            key_code = KeyCode::HOME;
-            return true;
-        case VK_END:
-            key_code = KeyCode::END;
-            return true;
-        case VK_PRIOR:
-            key_code = KeyCode::PAGE_UP;
-            return true;
-        case VK_NEXT:
-            key_code = KeyCode::PAGE_DOWN;
-            return true;
-        case VK_TAB:
-            key_code = KeyCode::TAB;
-            return true;
-        case VK_INSERT:
-            key_code = KeyCode::INSERT;
-            return true;
-        case VK_DELETE:
+    static inline constexpr bool is_print(char c) {
+        return 32 <= c && c <= 126;
+    }
+
+    static bool get_key_code(WORD virtual_key_code, char key_char, KeyCode &key_code) {
+        if (is_print(key_char)) {
+            switch (key_char) {
+            /* Alphabet keys */
+            case 'a':
+            case 'A':
+                key_code = KeyCode::K_A;
+                return true;
+            case 'b':
+            case 'B':
+                key_code = KeyCode::K_B;
+                return true;
+            case 'c':
+            case 'C':
+                key_code = KeyCode::K_C;
+                return true;
+            case 'd':
+            case 'D':
+                key_code = KeyCode::K_D;
+                return true;
+            case 'e':
+            case 'E':
+                key_code = KeyCode::K_E;
+                return true;
+            case 'f':
+            case 'F':
+                key_code = KeyCode::K_F;
+                return true;
+            case 'g':
+            case 'G':
+                key_code = KeyCode::K_G;
+                return true;
+            case 'h':
+            case 'H':
+                key_code = KeyCode::K_H;
+                return true;
+            case 'i':
+            case 'I':
+                key_code = KeyCode::K_I;
+                return true;
+            case 'j':
+            case 'J':
+                key_code = KeyCode::K_J;
+                return true;
+            case 'k':
+            case 'K':
+                key_code = KeyCode::K_K;
+                return true;
+            case 'l':
+            case 'L':
+                key_code = KeyCode::K_L;
+                return true;
+            case 'm':
+            case 'M':
+                key_code = KeyCode::K_M;
+                return true;
+            case 'n':
+            case 'N':
+                key_code = KeyCode::K_N;
+                return true;
+            case 'o':
+            case 'O':
+                key_code = KeyCode::K_O;
+                return true;
+            case 'p':
+            case 'P':
+                key_code = KeyCode::K_P;
+                return true;
+            case 'q':
+            case 'Q':
+                key_code = KeyCode::K_Q;
+                return true;
+            case 'r':
+            case 'R':
+                key_code = KeyCode::K_R;
+                return true;
+            case 's':
+            case 'S':
+                key_code = KeyCode::K_S;
+                return true;
+            case 't':
+            case 'T':
+                key_code = KeyCode::K_T;
+                return true;
+            case 'u':
+            case 'U':
+                key_code = KeyCode::K_U;
+                return true;
+            case 'v':
+            case 'V':
+                key_code = KeyCode::K_V;
+                return true;
+            case 'w':
+            case 'W':
+                key_code = KeyCode::K_W;
+                return true;
+            case 'x':
+            case 'X':
+                key_code = KeyCode::K_X;
+                return true;
+            case 'y':
+            case 'Y':
+                key_code = KeyCode::K_Y;
+                return true;
+            case 'z':
+            case 'Z':
+                key_code = KeyCode::K_Z;
+                return true;
+            /* Number keys */
+            case '0':
+                key_code = KeyCode::K_0;
+                return true;
+            case '1':
+                key_code = KeyCode::K_1;
+                return true;
+            case '2':
+                key_code = KeyCode::K_2;
+                return true;
+            case '3':
+                key_code = KeyCode::K_3;
+                return true;
+            case '4':
+                key_code = KeyCode::K_4;
+                return true;
+            case '5':
+                key_code = KeyCode::K_5;
+                return true;
+            case '6':
+                key_code = KeyCode::K_6;
+                return true;
+            case '7':
+                key_code = KeyCode::K_7;
+                return true;
+            case '8':
+                key_code = KeyCode::K_8;
+                return true;
+            case '9':
+                key_code = KeyCode::K_9;
+                return true;
+            /* Symbol keys */
+            case '!':
+                key_code = KeyCode::BANG;
+                return true;
+            case '@':
+                key_code = KeyCode::AT;
+                return true;
+            case '#':
+                key_code = KeyCode::HASH;
+                return true;
+            case '$':
+                key_code = KeyCode::DOLLAR;
+                return true;
+            case '%':
+                key_code = KeyCode::PERCENT;
+                return true;
+            case '^':
+                key_code = KeyCode::CARET;
+                return true;
+            case '&':
+                key_code = KeyCode::AMPERSAND;
+                return true;
+            case '*':
+                key_code = KeyCode::ASTERISK;
+                return true;
+            case '(':
+                key_code = KeyCode::LPAREN;
+                return true;
+            case ')':
+                key_code = KeyCode::RPAREN;
+                return true;
+            case '{':
+                key_code = KeyCode::LBRACE;
+                return true;
+            case '}':
+                key_code = KeyCode::RBRACE;
+                return true;
+            case '[':
+                key_code = KeyCode::LBRACKET;
+                return true;
+            case ']':
+                key_code = KeyCode::RBRACKET;
+                return true;
+            case '~':
+                key_code = KeyCode::TILDE;
+                return true;
+            case '`':
+                key_code = KeyCode::BQUOTE;
+                return true;
+            case ':':
+                key_code = KeyCode::COLON;
+                return true;
+            case ';':
+                key_code = KeyCode::SEMICOLON;
+                return true;
+            case '"':
+                key_code = KeyCode::DQUOTE;
+                return true;
+            case '\'':
+                key_code = KeyCode::SQUOTE;
+                return true;
+            case '<':
+                key_code = KeyCode::LESS;
+                return true;
+            case '>':
+                key_code = KeyCode::GREATER;
+                return true;
+            case '?':
+                key_code = KeyCode::HOOK;
+                return true;
+            case '/':
+                key_code = KeyCode::SLASH;
+                return true;
+            case ',':
+                key_code = KeyCode::COMMA;
+                return true;
+            case '.':
+                key_code = KeyCode::PERIOD;
+                return true;
+            case '\\':
+                key_code = KeyCode::BACKSLASH;
+                return true;
+            case '|':
+                key_code = KeyCode::PIPE;
+                return true;
+            case '_':
+                key_code = KeyCode::UNDERSCORE;
+                return true;
+            case '-':
+                key_code = KeyCode::MINUS;
+                return true;
+            case '+':
+                key_code = KeyCode::PLUS;
+                return true;
+            case '=':
+                key_code = KeyCode::EQUAL;
+                return true;
+            case ' ':
+                key_code = KeyCode::SPACE;
+                return true;
+            default:
+                return false;
+            }
+        } else {
+            switch (virtual_key_code) {
+            case VK_NUMPAD0:
+                key_code = KeyCode::K_0;
+                return true;
+            case VK_NUMPAD1:
+                key_code = KeyCode::K_1;
+                return true;
+            case VK_NUMPAD2:
+                key_code = KeyCode::K_2;
+                return true;
+            case VK_NUMPAD3:
+                key_code = KeyCode::K_3;
+                return true;
+            case VK_NUMPAD4:
+                key_code = KeyCode::K_4;
+                return true;
+            case VK_NUMPAD5:
+                key_code = KeyCode::K_5;
+                return true;
+            case VK_NUMPAD6:
+                key_code = KeyCode::K_6;
+                return true;
+            case VK_NUMPAD7:
+                key_code = KeyCode::K_7;
+                return true;
+            case VK_NUMPAD8:
+                key_code = KeyCode::K_8;
+                return true;
+            case VK_NUMPAD9:
+                key_code = KeyCode::K_9;
+                return true;
+            case VK_F1:
+                key_code = KeyCode::F1;
+                return true;
+            case VK_F2:
+                key_code = KeyCode::F2;
+                return true;
+            case VK_F3:
+                key_code = KeyCode::F3;
+                return true;
+            case VK_F4:
+                key_code = KeyCode::F4;
+                return true;
+            case VK_F5:
+                key_code = KeyCode::F5;
+                return true;
+            case VK_F6:
+                key_code = KeyCode::F6;
+                return true;
+            case VK_F7:
+                key_code = KeyCode::F7;
+                return true;
+            case VK_F8:
+                key_code = KeyCode::F8;
+                return true;
+            case VK_F9:
+                key_code = KeyCode::F9;
+                return true;
+            case VK_F10:
+                key_code = KeyCode::F10;
+                return true;
+            case VK_F11:
+                key_code = KeyCode::F11;
+                return true;
+            case VK_F12:
+                key_code = KeyCode::F12;
+                return true;
+            case VK_F13:
+                key_code = KeyCode::F13;
+                return true;
+            case VK_F14:
+                key_code = KeyCode::F14;
+                return true;
+            case VK_F15:
+                key_code = KeyCode::F15;
+                return true;
+            case VK_F16:
+                key_code = KeyCode::F16;
+                return true;
+            case VK_F17:
+                key_code = KeyCode::F17;
+                return true;
+            case VK_F18:
+                key_code = KeyCode::F18;
+                return true;
+            case VK_F19:
+                key_code = KeyCode::F19;
+                return true;
+            case VK_F20:
+                key_code = KeyCode::F20;
+                return true;
+            case VK_F21:
+                key_code = KeyCode::F21;
+                return true;
+            case VK_F22:
+                key_code = KeyCode::F22;
+                return true;
+            case VK_F23:
+                key_code = KeyCode::F23;
+                return true;
+            case VK_F24:
+                key_code = KeyCode::F24;
+                return true;
+            case VK_BACK:
+                key_code = KeyCode::BACKSPACE;
+                return true;
+            case VK_RETURN:
+                key_code = KeyCode::ENTER;
+                return true;
+            case VK_LEFT:
+                key_code = KeyCode::LEFT;
+                return true;
+            case VK_RIGHT:
+                key_code = KeyCode::RIGHT;
+                return true;
+            case VK_UP:
+                key_code = KeyCode::UP;
+                return true;
+            case VK_DOWN:
+                key_code = KeyCode::DOWN;
+                return true;
+            case VK_HOME:
+                key_code = KeyCode::HOME;
+                return true;
+            case VK_END:
+                key_code = KeyCode::END;
+                return true;
+            case VK_PRIOR:
+                key_code = KeyCode::PAGE_UP;
+                return true;
+            case VK_NEXT:
+                key_code = KeyCode::PAGE_DOWN;
+                return true;
+            case VK_TAB:
+                key_code = KeyCode::TAB;
+                return true;
+            case VK_INSERT:
+                key_code = KeyCode::INSERT;
+                return true;
+            case VK_DELETE:
 #    undef DELETE
-            key_code = KeyCode::DELETE;
-            return true;
-        case VK_ESCAPE:
-            key_code = KeyCode::ESCAPE;
-            return true;
-        default:
-            return false;
+                key_code = KeyCode::DELETE;
+                return true;
+            case VK_ESCAPE:
+                key_code = KeyCode::ESCAPE;
+                return true;
+            default:
+                return false;
+            }
         }
     }
 }    // namespace nite

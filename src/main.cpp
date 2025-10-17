@@ -49,8 +49,13 @@ int main() {
             std::visit(
                     overloaded{
                             [&](const nite::KeyEvent &ev) {
-                                auto msg = std::format("KeyEvent -> key_down: {}, key_char: {}", ev.key_down, ev.key_char);
+                                auto msg = std::format(
+                                        "KeyEvent -> key_down: {}, key_code: {} key_char: {}", ev.key_down,
+                                        nite::KeyCodeInfo::DebugString(ev.key_code), ev.key_char
+                                );
                                 lines.push_back(msg);
+                                if (ev.key_code == nite::KeyCode::K_Q)
+                                    nite::CloseWindow(state);
                             },
                             [&](const nite::FocusEvent &ev) {
                                 auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));

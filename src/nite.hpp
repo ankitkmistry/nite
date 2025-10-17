@@ -50,9 +50,11 @@ namespace nite
 
         constexpr static Color from_hex(const uint32_t hex) {
             // hex is encoded as 0x00rrggbb
-            return Color{.r = static_cast<uint8_t>((hex >> 16) & 0xFF),
-                         .g = static_cast<uint8_t>((hex >> 8) & 0xFF),
-                         .b = static_cast<uint8_t>((hex >> 0) & 0xFF)};
+            return Color{
+                    .r = static_cast<uint8_t>((hex >> 16) & 0xFF),
+                    .g = static_cast<uint8_t>((hex >> 8) & 0xFF),
+                    .b = static_cast<uint8_t>((hex >> 0) & 0xFF)
+            };
         }
 
         constexpr Color inverse() const {
@@ -312,6 +314,40 @@ namespace nite
         K_7,
         K_8,
         K_9,
+        // Symbol keys
+        BANG,          // !
+        AT,            // @
+        HASH,          // #
+        DOLLAR,        // $
+        PERCENT,       // %
+        CARET,         // ^
+        AMPERSAND,     // &
+        ASTERISK,      // *
+        LPAREN,        // (
+        RPAREN,        // )
+        LBRACE,        // {
+        RBRACE,        // }
+        LBRACKET,      // [
+        RBRACKET,      // ]
+        TILDE,         // ~
+        BQUOTE,        // `
+        COLON,         // :
+        SEMICOLON,     // ;
+        DQUOTE,        // "
+        SQUOTE,        // '
+        LESS,          // <
+        GREATER,       // >
+        HOOK,          // ?
+        SLASH,         // /
+        COMMA,         // ,
+        PERIOD,        // .
+        BACKSLASH,     /* \ */
+        PIPE,          // |
+        UNDERSCORE,    // _
+        MINUS,         // -
+        PLUS,          // +
+        EQUAL,         // =
+
         // Function keys
         F1,
         F2,
@@ -337,6 +373,7 @@ namespace nite
         F22,
         F23,
         F24,
+
         // Special keys
         BACKSPACE,
         ENTER,
@@ -352,6 +389,239 @@ namespace nite
         INSERT,
         DELETE,
         ESCAPE,
+        SPACE,
+    };
+
+    struct KeyCodeInfo {
+        KeyCodeInfo() = delete;
+        KeyCodeInfo(const KeyCodeInfo &) = delete;
+        KeyCodeInfo(KeyCodeInfo &&) = delete;
+        KeyCodeInfo &operator=(const KeyCodeInfo &) = delete;
+        KeyCodeInfo &operator=(KeyCodeInfo &&) = delete;
+        ~KeyCodeInfo() = delete;
+
+        static inline constexpr bool IsPrint(KeyCode key_code) {
+            return static_cast<int>(key_code) < static_cast<int>(KeyCode::F1);
+        }
+
+        static inline constexpr const char *DebugString(KeyCode key_code) {
+            switch (key_code) {
+            case KeyCode::K_A:
+                return "K_A";
+            case KeyCode::K_B:
+                return "K_B";
+            case KeyCode::K_C:
+                return "K_C";
+            case KeyCode::K_D:
+                return "K_D";
+            case KeyCode::K_E:
+                return "K_E";
+            case KeyCode::K_F:
+                return "K_F";
+            case KeyCode::K_G:
+                return "K_G";
+            case KeyCode::K_H:
+                return "K_H";
+            case KeyCode::K_I:
+                return "K_I";
+            case KeyCode::K_J:
+                return "K_J";
+            case KeyCode::K_K:
+                return "K_K";
+            case KeyCode::K_L:
+                return "K_L";
+            case KeyCode::K_M:
+                return "K_M";
+            case KeyCode::K_N:
+                return "K_N";
+            case KeyCode::K_O:
+                return "K_O";
+            case KeyCode::K_P:
+                return "K_P";
+            case KeyCode::K_Q:
+                return "K_Q";
+            case KeyCode::K_R:
+                return "K_R";
+            case KeyCode::K_S:
+                return "K_S";
+            case KeyCode::K_T:
+                return "K_T";
+            case KeyCode::K_U:
+                return "K_U";
+            case KeyCode::K_V:
+                return "K_V";
+            case KeyCode::K_W:
+                return "K_W";
+            case KeyCode::K_X:
+                return "K_X";
+            case KeyCode::K_Y:
+                return "K_Y";
+            case KeyCode::K_Z:
+                return "K_Z";
+            case KeyCode::K_0:
+                return "K_0";
+            case KeyCode::K_1:
+                return "K_1";
+            case KeyCode::K_2:
+                return "K_2";
+            case KeyCode::K_3:
+                return "K_3";
+            case KeyCode::K_4:
+                return "K_4";
+            case KeyCode::K_5:
+                return "K_5";
+            case KeyCode::K_6:
+                return "K_6";
+            case KeyCode::K_7:
+                return "K_7";
+            case KeyCode::K_8:
+                return "K_8";
+            case KeyCode::K_9:
+                return "K_9";
+            case KeyCode::BANG:
+                return "BANG";
+            case KeyCode::AT:
+                return "AT";
+            case KeyCode::HASH:
+                return "HASH";
+            case KeyCode::DOLLAR:
+                return "DOLLAR";
+            case KeyCode::PERCENT:
+                return "PERCENT";
+            case KeyCode::CARET:
+                return "CARET";
+            case KeyCode::AMPERSAND:
+                return "AMPERSAND";
+            case KeyCode::ASTERISK:
+                return "ASTERISK";
+            case KeyCode::LPAREN:
+                return "LPAREN";
+            case KeyCode::RPAREN:
+                return "RPAREN";
+            case KeyCode::LBRACE:
+                return "LBRACE";
+            case KeyCode::RBRACE:
+                return "RBRACE";
+            case KeyCode::LBRACKET:
+                return "LBRACKET";
+            case KeyCode::RBRACKET:
+                return "RBRACKET";
+            case KeyCode::TILDE:
+                return "TILDE";
+            case KeyCode::BQUOTE:
+                return "BQUOTE";
+            case KeyCode::COLON:
+                return "COLON";
+            case KeyCode::SEMICOLON:
+                return "SEMICOLON";
+            case KeyCode::DQUOTE:
+                return "DQUOTE";
+            case KeyCode::SQUOTE:
+                return "SQUOTE";
+            case KeyCode::LESS:
+                return "LESS";
+            case KeyCode::GREATER:
+                return "GREATER";
+            case KeyCode::HOOK:
+                return "HOOK";
+            case KeyCode::SLASH:
+                return "SLASH";
+            case KeyCode::COMMA:
+                return "COMMA";
+            case KeyCode::PERIOD:
+                return "PERIOD";
+            case KeyCode::BACKSLASH:
+                return "BACKSLASH";
+            case KeyCode::PIPE:
+                return "PIPE";
+            case KeyCode::UNDERSCORE:
+                return "UNDERSCORE";
+            case KeyCode::MINUS:
+                return "MINUS";
+            case KeyCode::PLUS:
+                return "PLUS";
+            case KeyCode::EQUAL:
+                return "EQUAL";
+            case KeyCode::F1:
+                return "F1";
+            case KeyCode::F2:
+                return "F2";
+            case KeyCode::F3:
+                return "F3";
+            case KeyCode::F4:
+                return "F4";
+            case KeyCode::F5:
+                return "F5";
+            case KeyCode::F6:
+                return "F6";
+            case KeyCode::F7:
+                return "F7";
+            case KeyCode::F8:
+                return "F8";
+            case KeyCode::F9:
+                return "F9";
+            case KeyCode::F10:
+                return "F10";
+            case KeyCode::F11:
+                return "F11";
+            case KeyCode::F12:
+                return "F12";
+            case KeyCode::F13:
+                return "F13";
+            case KeyCode::F14:
+                return "F14";
+            case KeyCode::F15:
+                return "F15";
+            case KeyCode::F16:
+                return "F16";
+            case KeyCode::F17:
+                return "F17";
+            case KeyCode::F18:
+                return "F18";
+            case KeyCode::F19:
+                return "F19";
+            case KeyCode::F20:
+                return "F20";
+            case KeyCode::F21:
+                return "F21";
+            case KeyCode::F22:
+                return "F22";
+            case KeyCode::F23:
+                return "F23";
+            case KeyCode::F24:
+                return "F24";
+            case KeyCode::BACKSPACE:
+                return "BACKSPACE";
+            case KeyCode::ENTER:
+                return "ENTER";
+            case KeyCode::LEFT:
+                return "LEFT";
+            case KeyCode::RIGHT:
+                return "RIGHT";
+            case KeyCode::UP:
+                return "UP";
+            case KeyCode::DOWN:
+                return "DOWN";
+            case KeyCode::HOME:
+                return "HOME";
+            case KeyCode::END:
+                return "END";
+            case KeyCode::PAGE_UP:
+                return "PAGE_UP";
+            case KeyCode::PAGE_DOWN:
+                return "PAGE_DOWN";
+            case KeyCode::TAB:
+                return "TAB";
+            case KeyCode::INSERT:
+                return "INSERT";
+            case KeyCode::DELETE:
+                return "DELETE";
+            case KeyCode::ESCAPE:
+                return "ESCAPE";
+            case KeyCode::SPACE:
+                return "SPACE";
+            }
+        }
     };
 
     struct KeyEvent {
