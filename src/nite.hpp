@@ -84,6 +84,23 @@ namespace nite
         }
     };
 
+    static const constexpr Color COLOR_WHITE = Color::from_hex(0xFFFFFF);
+    static const constexpr Color COLOR_SILVER = Color::from_hex(0xC0C0C0);
+    static const constexpr Color COLOR_GRAY = Color::from_hex(0x808080);
+    static const constexpr Color COLOR_BLACK = Color::from_hex(0x000000);
+    static const constexpr Color COLOR_RED = Color::from_hex(0xFF0000);
+    static const constexpr Color COLOR_MAROON = Color::from_hex(0x800000);
+    static const constexpr Color COLOR_YELLOW = Color::from_hex(0xFFFF00);
+    static const constexpr Color COLOR_OLIVE = Color::from_hex(0x808000);
+    static const constexpr Color COLOR_LIME = Color::from_hex(0x00FF00);
+    static const constexpr Color COLOR_GREEN = Color::from_hex(0x008000);
+    static const constexpr Color COLOR_AQUA = Color::from_hex(0x00FFFF);
+    static const constexpr Color COLOR_TEAL = Color::from_hex(0x008080);
+    static const constexpr Color COLOR_BLUE = Color::from_hex(0x0000FF);
+    static const constexpr Color COLOR_NAVY = Color::from_hex(0x000080);
+    static const constexpr Color COLOR_FUCHSIA = Color::from_hex(0xFF00FF);
+    static const constexpr Color COLOR_PURPLE = Color::from_hex(0x800080);
+
     static const uint8_t STYLE_RESET = 0b0001;
     static const uint8_t STYLE_BOLD = 0b0010;
     static const uint8_t STYLE_UNDERLINE = 0b0100;
@@ -207,8 +224,8 @@ namespace nite
                 cells = new Cell[width * height]{};
             }
 
-            CellBuffer(const Size &size) : width(size.width), height(size.height) {
-                cells = new Cell[size.width * size.height];
+            CellBuffer(const Size size) : width(size.width), height(size.height) {
+                cells = new Cell[size.width * size.height]{};
             }
 
             CellBuffer(const CellBuffer &other) : width(other.width), height(other.height) {
@@ -227,8 +244,9 @@ namespace nite
                 width = other.width;
                 height = other.height;
 
-                const size_t new_length = width * height;
                 delete[] cells;
+
+                const size_t new_length = width * height;
                 cells = new Cell[new_length];
                 for (size_t i = 0; i < new_length; i++) {
                     cells[i] = other.cells[i];
@@ -257,7 +275,7 @@ namespace nite
                 return cells[row * width + col];
             }
 
-            const Cell &at(const Position &pos) const {
+            const Cell &at(const Position pos) const {
                 return cells[pos.row * width + pos.col];
             }
 
@@ -265,7 +283,7 @@ namespace nite
                 return cells[row * width + col];
             }
 
-            Cell &at(const Position &pos) {
+            Cell &at(const Position pos) {
                 return cells[pos.row * width + pos.col];
             }
 
@@ -376,7 +394,7 @@ namespace nite
      * @param value the cell text
      * @param pos1 the first position provided
      * @param pos2 the second position provided
-     * @param style the style of the cell
+     * @param style the style of the cells
      */
     void FillCells(State &state, wchar_t value, const Position pos1, const Position pos2, const Style style = {});
     /**
@@ -386,7 +404,7 @@ namespace nite
      * @param value the cell text
      * @param pos the top left corner
      * @param size the size of the range
-     * @param style the style of the cell
+     * @param style the style of the cells
      */
     void FillCells(State &state, wchar_t value, const Position pos, const Size size, const Style style = {});
     /**
@@ -397,7 +415,7 @@ namespace nite
      * @param value the cell text
      * @param pos1 the first position provided
      * @param pos2 the second position provided
-     * @param style the style of the cell
+     * @param color the color of the cells
      */
     void FillBackground(State &state, const Position pos1, const Position pos2, const Color color);
     /**
@@ -408,7 +426,7 @@ namespace nite
      * @param value the cell text
      * @param pos1 the first position provided
      * @param pos2 the second position provided
-     * @param style the style of the cell
+     * @param color the color of the cells
      */
     void FillBackground(State &state, const Position pos, const Size size, const Color color);
     /**
@@ -419,7 +437,7 @@ namespace nite
      * @param value the cell text
      * @param pos1 the first position provided
      * @param pos2 the second position provided
-     * @param style the style of the cell
+     * @param color the color of the cells
      */
     void FillForeground(State &state, const Position pos1, const Position pos2, const Color color);
     /**
@@ -430,12 +448,22 @@ namespace nite
      * @param value the cell text
      * @param pos1 the first position provided
      * @param pos2 the second position provided
-     * @param style the style of the cell
+     * @param color the color of the cells
      */
     void FillForeground(State &state, const Position pos, const Size size, const Color color);
+    /**
+     * Draws a line on the console window where \p start is the starting point and 
+     * \p end is the ending point. Line is always drawn starting from \p start to \p end (exclusive).
+     * @param state the console state to work on
+     * @param start the starting point
+     * @param end the ending point
+     * @param fill the fill of the line
+     * @param style the style of the line
+     */
+    void DrawLine(State &state, const Position start, const Position end, wchar_t fill, const Style style = {});
 
     struct TextInfo {
-        std::string text = "";
+        std::string text = {};
         Position pos = {};
         Size size = {};
         Style style = {};

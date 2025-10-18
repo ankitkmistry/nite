@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cwchar>
 #include <format>
@@ -68,30 +69,33 @@ namespace nite
         case 0:
             break;
         case 1: {
-            const auto &cur = state.impl->swapchain.front();
-            const auto cur_size = cur.size();
+            const auto &cur_buf = state.impl->swapchain.front();
+            const auto cur_size = cur_buf.size();
 
             for (size_t row = 0; row < cur_size.height; row++) {
                 for (size_t col = 0; col < cur_size.width; col++) {
-                    const auto &cell = cur.at(col, row);
+                    if (row == 16) {
+                        (void) cur_size.width;
+                    }
+                    const auto &cell = cur_buf.at(col, row);
                     internal::console::set_cell(col, row, cell.value, cell.style);
                 }
             }
             break;
         }
         default: {
-            const auto prev = std::move(state.impl->swapchain.front());
-            const auto prev_size = prev.size();
+            const auto prev_buf = std::move(state.impl->swapchain.front());
+            const auto prev_size = prev_buf.size();
             state.impl->swapchain.pop();
 
-            const auto &cur = state.impl->swapchain.front();
-            const auto cur_size = cur.size();
+            const auto &cur_buf = state.impl->swapchain.front();
+            const auto cur_size = cur_buf.size();
 
             if (cur_size == prev_size) {
                 for (size_t row = 0; row < cur_size.height; row++) {
                     for (size_t col = 0; col < cur_size.width; col++) {
-                        const auto &cell = cur.at(col, row);
-                        const auto &prev_cell = prev.at(col, row);
+                        const auto &cell = cur_buf.at(col, row);
+                        const auto &prev_cell = prev_buf.at(col, row);
                         if (cell != prev_cell)
                             internal::console::set_cell(col, row, cell.value, cell.style);
                     }
@@ -100,22 +104,11 @@ namespace nite
                 internal::console::clear();
                 for (size_t row = 0; row < cur_size.height; row++) {
                     for (size_t col = 0; col < cur_size.width; col++) {
-                        const auto &cell = cur.at(col, row);
+                        const auto &cell = cur_buf.at(col, row);
                         internal::console::set_cell(col, row, cell.value, cell.style);
                     }
                 }
             }
-            // for (size_t row = 0; row < cur_size.height; row++) {
-            //     for (size_t col = 0; col < cur_size.width; col++) {
-            //         const auto &cell = cur.at(col, row);
-            //         if (row < prev_size.height && col < prev_size.width) {
-            //             const auto &prev_cell = prev.at(col, row);
-            //             if (cell != prev_cell)
-            //                 internal::console::set_cell(col, row, cell.value, cell.style);
-            //         } else
-            //             internal::console::set_cell(col, row, cell.value, cell.style);
-            //     }
-            // }
             break;
         }
         }
@@ -203,6 +196,23 @@ namespace nite
                     buffer.at(col, row).style.fg = color;
     }
 
+    void DrawLine(State &state, const Position start, const Position end, wchar_t fill, const Style style) {
+        const size_t col_start = start.col;
+        const size_t col_end = end.col;
+        const size_t row_start = start.row;
+        const size_t row_end = end.row;
+
+        if (col_start == col_end)
+            for (size_t row = row_start; row < row_end; row++)
+                state.impl->set_cell(col_start, row, fill, style);
+        else {
+            for (size_t col = col_start; col < col_end; col++) {
+                const double row = std::lerp(row_start, row_end, (col - col_start) / std::abs(1. * col_end - col_start));
+                state.impl->set_cell(col, row, fill, style);
+            }
+        }
+    }
+
     void Text(State &state, TextInfo info) {
         for (size_t i = 0; char c: info.text) {
             state.impl->set_cell(info.pos.col + i, info.pos.row, c, info.style);
@@ -216,14 +226,14 @@ namespace nite
     State::State(std::unique_ptr<StateImpl> impl) : impl(std::move(impl)) {}
 
     bool State::StateImpl::set_cell(const size_t col, const size_t row, wchar_t value, const Style style) {
-        const Size cur_size = swapchain.back().size();
-        if (col >= cur_size.width || row >= cur_size.height)
-            return false;
-
-        auto &cell = swapchain.back().at(col, row);
-        cell.value = value;
-        cell.style = style;
-        return true;
+        internal::CellBuffer &buffer = swapchain.back();
+        if (buffer.contains(col, row)) {
+            internal::Cell &cell = buffer.at(col, row);
+            cell.value = value;
+            cell.style = style;
+            return true;
+        }
+        return false;
     }
 }    // namespace nite
 
@@ -346,8 +356,8 @@ namespace nite::internal::console
     static UINT old_console_cp = 0;
 
     bool init() {
-        static const auto h_conin = GetStdHandle(STD_INPUT_HANDLE);
-        static const auto h_conout = GetStdHandle(STD_OUTPUT_HANDLE);
+        static const HANDLE h_conin = GetStdHandle(STD_INPUT_HANDLE);
+        static const HANDLE h_conout = GetStdHandle(STD_OUTPUT_HANDLE);
 
         if (!GetConsoleMode(h_conin, &old_in_mode))
             return false;
@@ -533,7 +543,7 @@ namespace nite
             };
 
             if (mouse_event.kind == MouseEventKind::DOWN) {
-                auto new_event = mouse_event;
+                MouseEvent new_event = mouse_event;
                 new_event.kind = MouseEventKind::UP;
                 pending_events.push(new_event);
             }

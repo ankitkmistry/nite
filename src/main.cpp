@@ -117,12 +117,11 @@ int main() {
                                .pos = {.col = 0, .row = 2},
         }
         );
-        nite::Text(
-                state, {
-                               .text = std::string(size.width, '-'),
-                               .pos = {.col = 0, .row = 3},
-        }
-        );
+
+        // nite::DrawLine(state, {.col = 0, .row = size.height - 1}, {.col = size.width, .row = 0}, ' ', {.bg = nite::COLOR_FUCHSIA});
+        // nite::DrawLine(state, {.col = 0, .row = 0}, {.col = size.width, .row = size.height}, ' ', {.bg = nite::COLOR_FUCHSIA});
+
+        nite::DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = nite::COLOR_RED});
 
         const size_t height = size.height - 4;
         const auto start = lines.size() < height ? 0 : lines.size() - height;
