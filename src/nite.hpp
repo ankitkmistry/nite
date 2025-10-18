@@ -85,29 +85,29 @@ namespace nite
         }
     };
 
-    static const constexpr Color COLOR_WHITE = Color::from_hex(0xFFFFFF);
-    static const constexpr Color COLOR_SILVER = Color::from_hex(0xC0C0C0);
-    static const constexpr Color COLOR_GRAY = Color::from_hex(0x808080);
-    static const constexpr Color COLOR_BLACK = Color::from_hex(0x000000);
-    static const constexpr Color COLOR_RED = Color::from_hex(0xFF0000);
-    static const constexpr Color COLOR_MAROON = Color::from_hex(0x800000);
-    static const constexpr Color COLOR_YELLOW = Color::from_hex(0xFFFF00);
-    static const constexpr Color COLOR_OLIVE = Color::from_hex(0x808000);
-    static const constexpr Color COLOR_LIME = Color::from_hex(0x00FF00);
-    static const constexpr Color COLOR_GREEN = Color::from_hex(0x008000);
-    static const constexpr Color COLOR_AQUA = Color::from_hex(0x00FFFF);
-    static const constexpr Color COLOR_TEAL = Color::from_hex(0x008080);
-    static const constexpr Color COLOR_BLUE = Color::from_hex(0x0000FF);
-    static const constexpr Color COLOR_NAVY = Color::from_hex(0x000080);
-    static const constexpr Color COLOR_FUCHSIA = Color::from_hex(0xFF00FF);
-    static const constexpr Color COLOR_PURPLE = Color::from_hex(0x800080);
+    inline static const constexpr Color COLOR_WHITE = Color::from_hex(0xFFFFFF);
+    inline static const constexpr Color COLOR_SILVER = Color::from_hex(0xC0C0C0);
+    inline static const constexpr Color COLOR_GRAY = Color::from_hex(0x808080);
+    inline static const constexpr Color COLOR_BLACK = Color::from_hex(0x000000);
+    inline static const constexpr Color COLOR_RED = Color::from_hex(0xFF0000);
+    inline static const constexpr Color COLOR_MAROON = Color::from_hex(0x800000);
+    inline static const constexpr Color COLOR_YELLOW = Color::from_hex(0xFFFF00);
+    inline static const constexpr Color COLOR_OLIVE = Color::from_hex(0x808000);
+    inline static const constexpr Color COLOR_LIME = Color::from_hex(0x00FF00);
+    inline static const constexpr Color COLOR_GREEN = Color::from_hex(0x008000);
+    inline static const constexpr Color COLOR_AQUA = Color::from_hex(0x00FFFF);
+    inline static const constexpr Color COLOR_TEAL = Color::from_hex(0x008080);
+    inline static const constexpr Color COLOR_BLUE = Color::from_hex(0x0000FF);
+    inline static const constexpr Color COLOR_NAVY = Color::from_hex(0x000080);
+    inline static const constexpr Color COLOR_FUCHSIA = Color::from_hex(0xFF00FF);
+    inline static const constexpr Color COLOR_PURPLE = Color::from_hex(0x800080);
 
-    static const constexpr uint8_t STYLE_RESET = 1 << 0;
-    static const constexpr uint8_t STYLE_BOLD = 1 << 1;
-    static const constexpr uint8_t STYLE_UNDERLINE = 1 << 2;
-    static const constexpr uint8_t STYLE_INVERSE = 1 << 3;
-    static const constexpr uint8_t STYLE_NO_FG = 1 << 4;
-    static const constexpr uint8_t STYLE_NO_BG = 1 << 5;
+    inline static const constexpr uint8_t STYLE_RESET = 1 << 0;
+    inline static const constexpr uint8_t STYLE_BOLD = 1 << 1;
+    inline static const constexpr uint8_t STYLE_UNDERLINE = 1 << 2;
+    inline static const constexpr uint8_t STYLE_INVERSE = 1 << 3;
+    inline static const constexpr uint8_t STYLE_NO_FG = 1 << 4;
+    inline static const constexpr uint8_t STYLE_NO_BG = 1 << 5;
 
     /**
      * Represent the style of a cell
@@ -132,6 +132,47 @@ namespace nite
         constexpr bool operator!=(const Style &other) const {
             return !(*this == other);
         }
+    };
+
+    struct BorderChar {
+        wchar_t value;
+        Style style;
+    };
+
+    /**
+     * Represents the border information.
+     *     
+     * Border is represented in the following way:
+     * 
+     * +----------------+---------+-----------------+
+     * | top_left       | top     | top_right       |
+     * +----------------+---------+-----------------+
+     * | left           | center  | right           |
+     * +----------------+---------+-----------------+
+     * | bottom_left    | bottom  | bottom_right    |
+     * +----------------+---------+-----------------+
+     *
+     * For example:
+     *  + - +
+     *  | + |
+     *  + - +
+     */
+    struct BorderInfo {
+        BorderChar top_left, top, top_right;
+        BorderChar left, center, right;
+        BorderChar bottom_left, bottom, bottom_right;
+    };
+
+    inline static const constexpr BorderInfo BORDER_DEFAULT = {
+            {'+', {}},
+            {'-', {}},
+            {'+', {}},
+            {'|', {}},
+            {'+', {}},
+            {'|', {}},
+            {'+', {}},
+            {'-', {}},
+            {'+', {}},
     };
 
     /**
@@ -357,6 +398,12 @@ namespace nite
      */
     Size GetBufferSize(State &state);
     /**
+     * Returns the size of the current selected pane
+     * @param state the console state to work on
+     * @return Size 
+     */
+    Size GetPaneSize(State &state);
+    /**
      * Returns the delta time in seconds
      * @param state the console state to work on
      * @return double 
@@ -428,6 +475,12 @@ namespace nite
      */
     void FillBackground(State &state, const Position pos1, const Position pos2, const Color color);
     /**
+     * Fill the background of all cells of the selected pane
+     * @param state the console state to work on
+     * @param color the background color
+     */
+    void FillBackground(State &state, const Color color);
+    /**
      * Fills the foreground of a range of cells on the console window 
      * where \p pos1 and \p pos2 are diagonally opposite.
      * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
@@ -461,6 +514,12 @@ namespace nite
      */
     void FillForeground(State &state, const Position pos, const Size size, const Color color);
     /**
+     * Fill the foreground of all cells of the selected pane
+     * @param state the console state to work on
+     * @param color the foreground color
+     */
+    void FillForeground(State &state, const Color color);
+    /**
      * Draws a line on the console window where \p start is the starting point and 
      * \p end is the ending point. Line is always drawn starting from \p start to \p end (exclusive).
      * @param state the console state to work on
@@ -470,6 +529,29 @@ namespace nite
      * @param style the style of the line
      */
     void DrawLine(State &state, const Position start, const Position end, wchar_t fill, const Style style = {});
+
+    void BeginPane(State &state, const Position top_left, const Size size);
+    // void BeginGridPane(State &state, const Position top_left, const Size size);
+    // void BeginGridCell(State &state, size_t index);
+    void EndPane(State &state);
+
+    void DrawBorder(State &state, BorderInfo info);
+
+    /*
+    --+++-||+--+--
+    */
+
+    // enum class Align {
+    //     TOP_LEFT,
+    //     TOP,
+    //     TOP_RIGHT,
+    //     LEFT,
+    //     CENTER,
+    //     RIGHT,
+    //     BOTTOM_LEFT,
+    //     BOTTOM,
+    //     BOTTOM_RIGHT,
+    // };
 
     struct TextInfo {
         std::string text = {};

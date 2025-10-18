@@ -6,6 +6,7 @@
 #include <cwchar>
 #include <optional>
 #include <queue>
+#include <stack>
 
 #include "nite.hpp"
 
@@ -17,15 +18,85 @@
 
 namespace nite
 {
+    namespace internal
+    {
+        class Box {
+            Position m_pos;
+            Size m_size;
+
+          public:
+            Box() = default;
+
+            Box(const Position &p, const Size &s) : m_pos(p), m_size(s) {}
+
+            void set_pos(const Position &p) {
+                m_pos = p;
+            }
+
+            Position get_pos() const {
+                return m_pos;
+            }
+
+            void set_size(const Size &s) {
+                m_size = s;
+            }
+
+            Size get_size() const {
+                return m_size;
+            }
+
+            bool contains(const size_t col, const size_t row) const {
+                return m_pos.col <= col && col < m_pos.col + m_size.width && m_pos.row <= row && row < m_pos.row + m_size.height;
+            }
+        };
+    }    // namespace internal
+}    // namespace nite
+
+namespace nite
+{
     struct State::StateImpl {
         bool closed = false;
         std::chrono::duration<double> delta_time;
         std::queue<internal::CellBuffer> swapchain;
+        std::stack<std::unique_ptr<internal::Box>> selected_stack;
 
         StateImpl() = default;
 
-        bool set_cell(const size_t col, const size_t row, wchar_t value, const Style style);
+        bool set_cell(size_t col, size_t row, wchar_t value, const Style style) {
+            internal::Box &selected = *selected_stack.top();
+            col += selected.get_pos().col;
+            row += selected.get_pos().row;
+
+            internal::CellBuffer &buffer = swapchain.back();
+            if (buffer.contains(col, row) && selected.contains(col, row)) {
+                internal::Cell &cell = buffer.at(col, row);
+                cell.value = value;
+                if ((style.mode & STYLE_NO_FG) == 0)
+                    cell.style.fg = style.fg;
+                if ((style.mode & STYLE_NO_BG) == 0)
+                    cell.style.bg = style.bg;
+                // cell.style.mode = cell.style.mode;
+                cell.style.mode = style.mode & ~(STYLE_NO_FG | STYLE_NO_BG);
+                return true;
+            }
+            return false;
+        }
+
+        internal::Cell &get_cell(size_t col, size_t row) {
+            static internal::Cell sentinel;
+
+            internal::Box &selected = *selected_stack.top();
+            col += selected.get_pos().col;
+            row += selected.get_pos().row;
+
+            internal::CellBuffer &buffer = swapchain.back();
+            if (buffer.contains(col, row) && selected.contains(col, row))
+                return buffer.at(col, row);
+            return sentinel;
+        }
     };
+
+    State::State(std::unique_ptr<StateImpl> impl) : impl(std::move(impl)) {}
 
     Size GetWindowSize() {
         Size size;
@@ -41,6 +112,10 @@ namespace nite
 
     Size GetBufferSize(State &state) {
         return state.impl->swapchain.back().size();
+    }
+
+    Size GetPaneSize(State &state) {
+        return state.impl->selected_stack.top()->get_size();
     }
 
     double GetDeltaTime(State &state) {
@@ -68,9 +143,12 @@ namespace nite
     void BeginDrawing(State &state) {
         internal::CellBuffer buf(GetWindowSize());
         state.impl->swapchain.push(buf);
+        state.impl->selected_stack.push(std::make_unique<internal::Box>(Position{.col = 0, .row = 0}, buf.size()));
     }
 
     void EndDrawing(State &state) {
+        state.impl->selected_stack.pop();
+
         switch (state.impl->swapchain.size()) {
         case 0:
             break;
@@ -163,11 +241,21 @@ namespace nite
         const size_t row_start = std::min(pos1.row, pos2.row);
         const size_t row_end = std::max(pos1.row, pos2.row);
 
-        internal::CellBuffer &buffer = state.impl->swapchain.back();
         for (size_t row = row_start; row < row_end; row++)
-            for (size_t col = col_start; col < col_end; col++)
-                if (buffer.contains(col, row))
-                    buffer.at(col, row).style.bg = color;
+            for (size_t col = col_start; col < col_end; col++) {
+                internal::Cell &cell = state.impl->get_cell(col, row);
+                cell.style.bg = color;
+            }
+    }
+
+    void FillBackground(State &state, const Color color) {
+        internal::Box &selected = *state.impl->selected_stack.top();
+
+        for (size_t row = 0; row < selected.get_size().height; row++)
+            for (size_t col = 0; col < selected.get_size().width; col++) {
+                internal::Cell &cell = state.impl->get_cell(col, row);
+                cell.style.bg = color;
+            }
     }
 
     void FillBackground(State &state, const Position pos, const Size size, const Color color) {
@@ -176,11 +264,11 @@ namespace nite
         const size_t row_start = pos.row;
         const size_t row_end = pos.col + size.height;
 
-        internal::CellBuffer &buffer = state.impl->swapchain.back();
         for (size_t row = row_start; row < row_end; row++)
-            for (size_t col = col_start; col < col_end; col++)
-                if (buffer.contains(col, row))
-                    buffer.at(col, row).style.bg = color;
+            for (size_t col = col_start; col < col_end; col++) {
+                internal::Cell &cell = state.impl->get_cell(col, row);
+                cell.style.bg = color;
+            }
     }
 
     void FillForeground(State &state, const Position pos1, const Position pos2, const Color color) {
@@ -189,11 +277,11 @@ namespace nite
         const size_t row_start = std::min(pos1.row, pos2.row);
         const size_t row_end = std::max(pos1.row, pos2.row);
 
-        internal::CellBuffer &buffer = state.impl->swapchain.back();
         for (size_t row = row_start; row < row_end; row++)
-            for (size_t col = col_start; col < col_end; col++)
-                if (buffer.contains(col, row))
-                    buffer.at(col, row).style.fg = color;
+            for (size_t col = col_start; col < col_end; col++) {
+                internal::Cell &cell = state.impl->get_cell(col, row);
+                cell.style.fg = color;
+            }
     }
 
     void FillForeground(State &state, const Position pos, const Size size, const Color color) {
@@ -202,11 +290,21 @@ namespace nite
         const size_t row_start = pos.row;
         const size_t row_end = pos.col + size.height;
 
-        internal::CellBuffer &buffer = state.impl->swapchain.back();
         for (size_t row = row_start; row < row_end; row++)
-            for (size_t col = col_start; col < col_end; col++)
-                if (buffer.contains(col, row))
-                    buffer.at(col, row).style.fg = color;
+            for (size_t col = col_start; col < col_end; col++) {
+                internal::Cell &cell = state.impl->get_cell(col, row);
+                cell.style.fg = color;
+            }
+    }
+
+    void FillForeground(State &state, const Color color) {
+        internal::Box &selected = *state.impl->selected_stack.top();
+
+        for (size_t row = 0; row < selected.get_size().height; row++)
+            for (size_t col = 0; col < selected.get_size().width; col++) {
+                internal::Cell &cell = state.impl->get_cell(col, row);
+                cell.style.fg = color;
+            }
     }
 
     void DrawLine(State &state, const Position start, const Position end, wchar_t fill, const Style style) {
@@ -226,31 +324,38 @@ namespace nite
         }
     }
 
+    void BeginPane(State &state, const Position top_left, const Size size) {
+        state.impl->selected_stack.push(std::make_unique<internal::Box>(top_left, size));
+    }
+
+    void EndPane(State &state) {
+        state.impl->selected_stack.pop();
+    }
+
+    void DrawBorder(State &state, BorderInfo info) {
+        const internal::Box &selected = *state.impl->selected_stack.top();
+
+        SetCell(state, info.top_left.value, {.col = 0, .row = 0}, info.top_left.style);
+        SetCell(state, info.top_right.value, {.col = selected.get_size().width - 1, .row = 0}, info.top_right.style);
+        SetCell(state, info.bottom_left.value, {.col = 0, .row = selected.get_size().height - 1}, info.bottom_left.style);
+        SetCell(state, info.bottom_right.value, {.col = selected.get_size().width - 1, .row = selected.get_size().height - 1}, info.bottom_right.style);
+
+        for (size_t row = 1; row < selected.get_size().height - 1; row++) {
+            SetCell(state, info.left.value, {.col = 0, .row = row}, info.left.style);
+            SetCell(state, info.right.value, {.col = selected.get_size().width - 1, .row = row}, info.right.style);
+        }
+
+        for (size_t col = 1; col < selected.get_size().width - 1; col++) {
+            SetCell(state, info.top.value, {.col = col, .row = 0}, info.top.style);
+            SetCell(state, info.bottom.value, {.col = col, .row = selected.get_size().height - 1}, info.bottom.style);
+        }
+    }
+
     void Text(State &state, TextInfo info) {
         for (size_t i = 0; char c: info.text) {
             state.impl->set_cell(info.pos.col + i, info.pos.row, c, info.style);
             i++;
         }
-    }
-}    // namespace nite
-
-namespace nite
-{
-    State::State(std::unique_ptr<StateImpl> impl) : impl(std::move(impl)) {}
-
-    bool State::StateImpl::set_cell(const size_t col, const size_t row, wchar_t value, const Style style) {
-        internal::CellBuffer &buffer = swapchain.back();
-        if (buffer.contains(col, row)) {
-            internal::Cell &cell = buffer.at(col, row);
-            cell.value = value;
-            if ((style.mode & STYLE_NO_FG) == 0)
-                cell.style.fg = style.fg;
-            if ((style.mode & STYLE_NO_BG) == 0)
-                cell.style.bg = style.bg;
-            cell.style.mode = style.mode & ~(STYLE_NO_FG | STYLE_NO_BG);
-            return true;
-        }
-        return false;
     }
 }    // namespace nite
 
@@ -267,11 +372,13 @@ namespace nite::internal::console
         if (style.mode & STYLE_INVERSE)
             print("\x1b[7m");
 
-        // Set foreground color
-        print("\x1b[38;2;" + std::to_string(style.fg.r) + ";" + std::to_string(style.fg.g) + ";" + std::to_string(style.fg.b) + "m");
+        if ((style.mode & STYLE_NO_FG) == 0)
+            // Set foreground color
+            print("\x1b[38;2;" + std::to_string(style.fg.r) + ";" + std::to_string(style.fg.g) + ";" + std::to_string(style.fg.b) + "m");
 
-        // Set background color
-        print("\x1b[48;2;" + std::to_string(style.bg.r) + ";" + std::to_string(style.bg.g) + ";" + std::to_string(style.bg.b) + "m");
+        if ((style.mode & STYLE_NO_BG) == 0)
+            // Set background color
+            print("\x1b[48;2;" + std::to_string(style.bg.r) + ";" + std::to_string(style.bg.g) + ";" + std::to_string(style.bg.b) + "m");
     }
 
     void gotoxy(const size_t col, const size_t row) {
