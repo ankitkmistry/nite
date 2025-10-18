@@ -1,8 +1,9 @@
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <ctime>
 #include <cwchar>
-#include <format>
 #include <optional>
 #include <queue>
 
@@ -18,6 +19,7 @@ namespace nite
 {
     struct State::StateImpl {
         bool closed = false;
+        std::chrono::duration<double> delta_time;
         std::queue<internal::CellBuffer> swapchain;
 
         StateImpl() = default;
@@ -39,6 +41,10 @@ namespace nite
 
     Size GetBufferSize(State &state) {
         return state.impl->swapchain.back().size();
+    }
+
+    double GetDeltaTime(State &state) {
+        return state.impl->delta_time.count();
     }
 
     bool ShouldWindowClose(State &state) {
@@ -69,26 +75,30 @@ namespace nite
         case 0:
             break;
         case 1: {
-            const auto &cur_buf = state.impl->swapchain.front();
+            auto start = std::chrono::high_resolution_clock::now();
+
+            auto &cur_buf = state.impl->swapchain.front();
             const auto cur_size = cur_buf.size();
 
             for (size_t row = 0; row < cur_size.height; row++) {
                 for (size_t col = 0; col < cur_size.width; col++) {
-                    if (row == 16) {
-                        (void) cur_size.width;
-                    }
                     const auto &cell = cur_buf.at(col, row);
                     internal::console::set_cell(col, row, cell.value, cell.style);
                 }
             }
+
+            auto end = std::chrono::high_resolution_clock::now();
+            state.impl->delta_time = end - start;
             break;
         }
         default: {
-            const auto prev_buf = std::move(state.impl->swapchain.front());
+            auto start = std::chrono::high_resolution_clock::now();
+
+            auto prev_buf = std::move(state.impl->swapchain.front());
             const auto prev_size = prev_buf.size();
             state.impl->swapchain.pop();
 
-            const auto &cur_buf = state.impl->swapchain.front();
+            auto &cur_buf = state.impl->swapchain.front();
             const auto cur_size = cur_buf.size();
 
             if (cur_size == prev_size) {
@@ -109,6 +119,9 @@ namespace nite
                     }
                 }
             }
+
+            auto end = std::chrono::high_resolution_clock::now();
+            state.impl->delta_time = end - start;
             break;
         }
         }
@@ -230,7 +243,11 @@ namespace nite
         if (buffer.contains(col, row)) {
             internal::Cell &cell = buffer.at(col, row);
             cell.value = value;
-            cell.style = style;
+            if ((style.mode & STYLE_NO_FG) == 0)
+                cell.style.fg = style.fg;
+            if ((style.mode & STYLE_NO_BG) == 0)
+                cell.style.bg = style.bg;
+            cell.style.mode = style.mode & ~(STYLE_NO_FG | STYLE_NO_BG);
             return true;
         }
         return false;
@@ -251,16 +268,10 @@ namespace nite::internal::console
             print("\x1b[7m");
 
         // Set foreground color
-        auto r = std::to_string(style.fg.r);
-        auto g = std::to_string(style.fg.g);
-        auto b = std::to_string(style.fg.b);
-        print("\x1b[38;2;" + r + ";" + g + ";" + b + "m");
+        print("\x1b[38;2;" + std::to_string(style.fg.r) + ";" + std::to_string(style.fg.g) + ";" + std::to_string(style.fg.b) + "m");
 
         // Set background color
-        r = std::to_string(style.bg.r);
-        g = std::to_string(style.bg.g);
-        b = std::to_string(style.bg.b);
-        print("\x1b[48;2;" + r + ";" + g + ";" + b + "m");
+        print("\x1b[48;2;" + std::to_string(style.bg.r) + ";" + std::to_string(style.bg.g) + ";" + std::to_string(style.bg.b) + "m");
     }
 
     void gotoxy(const size_t col, const size_t row) {
@@ -280,24 +291,21 @@ namespace nite::internal::console
 namespace nite::internal::console
 {
     static ConsoleError get_last_error() {
-        LPVOID err_msg_buf;
-        FormatMessage(
-                FORMAT_MESSAGE_ALLOCATE_BUFFER              // Allocates a buffer for the message
-                        | FORMAT_MESSAGE_FROM_SYSTEM        // Searches the system message table
+        char err_msg_buf[4096];
+        DWORD size = FormatMessage(
+                FORMAT_MESSAGE_FROM_SYSTEM                  // Searches the system message table
                         | FORMAT_MESSAGE_IGNORE_INSERTS,    // Ignores insert sequences in the message definition.
                 null,                                       // Handle to the module containing the message table
                 GetLastError(),                             // Error code to format
                 0,                                          // Default language
-                reinterpret_cast<LPSTR>(&err_msg_buf),      // Output buffer for the formatted message
-                0,                                          // Minimum size of the output buffer
-                null
-        );    // No arguments for insert sequences
-        size_t size = std::strlen(static_cast<const char *>(err_msg_buf));
-        // Build the string
-        std::string msg_str{static_cast<char *>(err_msg_buf), size};
-        // Free the old buffer
-        LocalFree(err_msg_buf);
-        return ConsoleError(msg_str);
+                err_msg_buf,                                // Output buffer for the formatted message
+                4096,                                       // Minimum size of the output buffer
+                null                                        // No arguments for insert sequences
+        );
+
+        if (size == 0)
+            return get_last_error();
+        return ConsoleError(std::string{static_cast<const char *>(err_msg_buf), size});
     }
 
     bool print(const std::string &text) {
@@ -379,7 +387,6 @@ namespace nite::internal::console
         in_mode |= ENABLE_WINDOW_INPUT;
         in_mode &= ~ENABLE_QUICK_EDIT_MODE;
         if (!SetConsoleMode(h_conin, in_mode)) {
-            print(std::format("Invalid handle: {}\n", (h_conin == INVALID_HANDLE_VALUE)));
             print(get_last_error().what());
             return false;
         }

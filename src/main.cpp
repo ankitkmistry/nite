@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <variant>
@@ -5,6 +6,8 @@
 #include <format>
 
 #include "nite.hpp"
+
+using namespace nite;
 
 template<class... Ts>
 struct overloaded : Ts... {
@@ -14,78 +17,109 @@ struct overloaded : Ts... {
 template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
-std::string btn_str(nite::MouseButton btn) {
+std::string btn_str(MouseButton btn) {
     switch (btn) {
-    case nite::MouseButton::NONE:
+    case MouseButton::NONE:
         return "NONE";
-    case nite::MouseButton::LEFT:
+    case MouseButton::LEFT:
         return "LEFT";
-    case nite::MouseButton::RIGHT:
+    case MouseButton::RIGHT:
         return "RIGHT";
     }
 }
 
+void hello_test(State &state, std::vector<std::string> &lines) {
+    auto size = GetBufferSize(state);
+    Text(state, {
+                        .text = "Hello, World",
+                        .pos = {.col = 0, .row = 0},
+    });
+    Text(state, {
+                        .text = std::format("Width: {}", size.width),
+                        .pos = {.col = 0, .row = 1},
+    });
+    Text(state, {
+                        .text = std::format("Height: {}", size.height),
+                        .pos = {.col = 0, .row = 2},
+    });
+
+    // DrawLine(state, {.col = 0, .row = size.height - 1}, {.col = size.width, .row = 0}, ' ', {.bg = COLOR_FUCHSIA});
+    // DrawLine(state, {.col = 0, .row = 0}, {.col = size.width, .row = size.height}, ' ', {.bg = COLOR_FUCHSIA});
+
+    DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = COLOR_RED});
+
+    const size_t height = size.height - 4;
+    const auto start = lines.size() < height ? 0 : lines.size() - height;
+    for (size_t i = start, j = 0; i < lines.size(); i++, j++)
+        Text(state, {
+                            .text = lines[i], .pos = {.col = 0, .row = 4 + j}
+        });
+}
+
+void color_test(State &state) {
+    auto size = GetBufferSize(state);
+
+    for (size_t row = 0; row < size.height; row++)
+        for (size_t col = 0; col < size.width; col++) {
+            uint8_t x = std::lerp(0, 255, 1.0 * col / (size.width - 1));
+            uint8_t y = std::lerp(0, 255, 1.0 * row / (size.height - 1));
+
+            auto t = time(0) * GetDeltaTime(state);
+            auto p = sin(t) * sin(t);
+
+            SetCell(state, ' ', {.col = col, .row = row}, {.bg = Color::from_rgb(255 * p, x, y)});
+        }
+}
+
 int main() {
-
-    /*
-    nite::begin_drawing()
-
-    * Rect
-    * Text
-
-
-    nite::end_drawing()
-    */
-
-    auto &state = nite::GetState();
-
-    nite::Initialize(state);
+    auto &state = GetState();
+    Initialize(state);
 
     std::vector<std::string> lines;
 
-    while (!nite::ShouldWindowClose(state)) {
-        nite::Event event;
-        while (nite::PollEvent(event)) {
+    while (!ShouldWindowClose(state)) {
+        Event event;
+        while (PollEvent(event)) {
             std::visit(
                     overloaded{
-                            [&](const nite::KeyEvent &ev) {
+                            [&](const KeyEvent &ev) {
                                 auto msg = std::format(
-                                        "KeyEvent -> key_down: {}, key_code: {} key_char: {}", ev.key_down,
-                                        nite::KeyCodeInfo::DebugString(ev.key_code), ev.key_char
+                                        "KeyEvent -> key_down: {}, key_code: {} key_char: {}", ev.key_down, KeyCodeInfo::DebugString(ev.key_code),
+                                        ev.key_char
                                 );
                                 lines.push_back(msg);
-                                if (ev.key_code == nite::KeyCode::K_Q)
-                                    nite::CloseWindow(state);
+                                if (ev.key_code == KeyCode::K_Q)
+                                    CloseWindow(state);
                             },
-                            [&](const nite::FocusEvent &ev) {
+                            [&](const FocusEvent &ev) {
                                 auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));
                                 lines.push_back(msg);
                             },
-                            [&](const nite::ResizeEvent &ev) {
+                            [&](const ResizeEvent &ev) {
                                 auto msg = std::format("ResizeEvent -> window resized {}x{}", ev.size.width, ev.size.height);
                                 lines.push_back(msg);
                             },
-                            [&](const nite::MouseEvent &ev) {
+                            [&](const MouseEvent &ev) {
                                 switch (ev.kind) {
-                                case nite::MouseEventKind::DOWN:
+                                case MouseEventKind::DOWN:
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse down {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
                                     break;
-                                case nite::MouseEventKind::UP:
+                                case MouseEventKind::UP:
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse up {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
                                     break;
-                                case nite::MouseEventKind::MOVED:
+                                case MouseEventKind::MOVED:
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse moved", ev.pos.col, ev.pos.row));
                                     break;
-                                case nite::MouseEventKind::SCROLL_DOWN:
+                                case MouseEventKind::SCROLL_DOWN:
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled down", ev.pos.col, ev.pos.row));
                                     break;
-                                case nite::MouseEventKind::SCROLL_UP:
+                                case MouseEventKind::SCROLL_UP:
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled up", ev.pos.col, ev.pos.row));
                                     break;
-                                case nite::MouseEventKind::SCROLL_LEFT:
+                                case MouseEventKind::SCROLL_LEFT:
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled left", ev.pos.col, ev.pos.row));
                                     break;
-                                case nite::MouseEventKind::SCROLL_RIGHT:
+                                case MouseEventKind::SCROLL_RIGHT:
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled right", ev.pos.col, ev.pos.row));
                                     break;
                                 }
@@ -96,45 +130,26 @@ int main() {
             );
         }
 
-        nite::BeginDrawing(state);
+        BeginDrawing(state);
 
-        auto size = nite::GetBufferSize(state);
-        nite::Text(
-                state, {
-                               .text = "Hello, World",
-                               .pos = {.col = 0, .row = 0},
-        }
-        );
-        nite::Text(
-                state, {
-                               .text = std::format("Width: {}", size.width),
-                               .pos = {.col = 0, .row = 1},
-        }
-        );
-        nite::Text(
-                state, {
-                               .text = std::format("Height: {}", size.height),
-                               .pos = {.col = 0, .row = 2},
-        }
-        );
+        hello_test(state, lines);
 
-        // nite::DrawLine(state, {.col = 0, .row = size.height - 1}, {.col = size.width, .row = 0}, ' ', {.bg = nite::COLOR_FUCHSIA});
-        // nite::DrawLine(state, {.col = 0, .row = 0}, {.col = size.width, .row = size.height}, ' ', {.bg = nite::COLOR_FUCHSIA});
+        auto size = GetBufferSize(state);
 
-        nite::DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = nite::COLOR_RED});
+        Text(state, {
+                            .text = std::format("delta time: {:.3f} secs", GetDeltaTime(state)),
+                            .pos = {.x = size.width / 2, .y = 0             },
+                            .style{.fg = COLOR_WHITE,   .mode = STYLE_NO_BG}
+        });
+        Text(state, {
+                            .text = std::format("FPS: {:.2f}", 1 / GetDeltaTime(state)),
+                            .pos = {.x = size.width / 2, .y = 1             },
+                            .style{.fg = COLOR_WHITE,   .mode = STYLE_NO_BG}
+        });
 
-        const size_t height = size.height - 4;
-        const auto start = lines.size() < height ? 0 : lines.size() - height;
-        for (size_t i = start, j = 0; i < lines.size(); i++, j++)
-            nite::Text(
-                    state, {
-                                   .text = lines[i], .pos = {.col = 0, .row = 4 + j}
-            }
-            );
-
-        nite::EndDrawing(state);
+        EndDrawing(state);
     }
 
-    nite::Cleanup();
+    Cleanup();
     return 0;
 }

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
 #include <stdexcept>
 #include <string>
 #include <memory>
@@ -101,10 +102,12 @@ namespace nite
     static const constexpr Color COLOR_FUCHSIA = Color::from_hex(0xFF00FF);
     static const constexpr Color COLOR_PURPLE = Color::from_hex(0x800080);
 
-    static const uint8_t STYLE_RESET = 0b0001;
-    static const uint8_t STYLE_BOLD = 0b0010;
-    static const uint8_t STYLE_UNDERLINE = 0b0100;
-    static const uint8_t STYLE_INVERSE = 0b1000;
+    static const constexpr uint8_t STYLE_RESET = 1 << 0;
+    static const constexpr uint8_t STYLE_BOLD = 1 << 1;
+    static const constexpr uint8_t STYLE_UNDERLINE = 1 << 2;
+    static const constexpr uint8_t STYLE_INVERSE = 1 << 3;
+    static const constexpr uint8_t STYLE_NO_FG = 1 << 4;
+    static const constexpr uint8_t STYLE_NO_BG = 1 << 5;
 
     /**
      * Represent the style of a cell
@@ -354,6 +357,12 @@ namespace nite
      */
     Size GetBufferSize(State &state);
     /**
+     * Returns the delta time in seconds
+     * @param state the console state to work on
+     * @return double 
+     */
+    double GetDeltaTime(State &state);
+    /**
      * Returns whether the console window should be closed
      * @param state the console state to work on
      * @return true if window is closed
@@ -465,7 +474,6 @@ namespace nite
     struct TextInfo {
         std::string text = {};
         Position pos = {};
-        Size size = {};
         Style style = {};
     };
 
