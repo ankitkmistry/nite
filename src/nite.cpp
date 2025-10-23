@@ -2,11 +2,14 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <ctime>
 #include <cwchar>
 #include <optional>
 #include <queue>
 #include <stack>
+#include <unordered_map>
+#include <variant>
 
 #include "nite.hpp"
 
@@ -15,6 +18,10 @@
 #endif
 
 #define null (nullptr)
+
+static inline constexpr bool is_print(char c) {
+    return 32 <= c && c <= 126;
+}
 
 namespace nite
 {
@@ -48,14 +55,31 @@ namespace nite
             bool contains(const size_t col, const size_t row) const {
                 return m_pos.col <= col && col < m_pos.col + m_size.width && m_pos.row <= row && row < m_pos.row + m_size.height;
             }
+
+            bool contains(const Position pos) const {
+                return contains(pos.col, pos.row);
+            }
         };
     }    // namespace internal
 }    // namespace nite
 
 namespace nite
 {
+    struct KeyState {
+        bool printable = false;
+        bool down = false;
+    };
+
     struct State::StateImpl {
         bool closed = false;
+
+        // Events mechanism
+        std::unordered_map<KeyCode, KeyState> key_states;
+        Position mouse_pos;
+        intmax_t mouse_scroll_v = 0;
+        intmax_t mouse_scroll_h = 0;
+
+        // Render mechanism
         std::chrono::duration<double> delta_time;
         std::queue<internal::CellBuffer> swapchain;
         std::stack<std::unique_ptr<internal::Box>> selected_stack;
@@ -147,6 +171,9 @@ namespace nite
     }
 
     void EndDrawing(State &state) {
+        state.impl->mouse_scroll_v = 0;
+        state.impl->mouse_scroll_h = 0;
+
         state.impl->selected_stack.pop();
 
         switch (state.impl->swapchain.size()) {
@@ -211,6 +238,18 @@ namespace nite
 
     void SetCell(State &state, wchar_t value, const Position position, const Style style) {
         state.impl->set_cell(position.col, position.row, value, style);
+    }
+
+    void SetCellStyle(State &state, const Position position, const Style style) {
+        state.impl->get_cell(position.col, position.row).style = style;
+    }
+
+    void SetCellBG(State &state, const Position position, const Color color) {
+        state.impl->get_cell(position.col, position.row).style.bg = color;
+    }
+
+    void SetCellFG(State &state, const Position position, const Color color) {
+        state.impl->get_cell(position.col, position.row).style.fg = color;
     }
 
     void FillCells(State &state, wchar_t value, const Position pos1, const Position pos2, const Style style) {
@@ -338,7 +377,8 @@ namespace nite
         SetCell(state, info.top_left.value, {.col = 0, .row = 0}, info.top_left.style);
         SetCell(state, info.top_right.value, {.col = selected.get_size().width - 1, .row = 0}, info.top_right.style);
         SetCell(state, info.bottom_left.value, {.col = 0, .row = selected.get_size().height - 1}, info.bottom_left.style);
-        SetCell(state, info.bottom_right.value, {.col = selected.get_size().width - 1, .row = selected.get_size().height - 1}, info.bottom_right.style);
+        SetCell(state, info.bottom_right.value, {.col = selected.get_size().width - 1, .row = selected.get_size().height - 1},
+                info.bottom_right.style);
 
         for (size_t row = 1; row < selected.get_size().height - 1; row++) {
             SetCell(state, info.left.value, {.col = 0, .row = row}, info.left.style);
@@ -352,10 +392,88 @@ namespace nite
     }
 
     void Text(State &state, TextInfo info) {
+        if (internal::Box(info.pos, Size{.width = info.text.size(), .height = 1})
+                    .contains(GetMousePosition(state) - state.impl->selected_stack.top()->get_pos())) {
+            if (info.on_hover)
+                info.on_hover(std::forward<TextInfo &>(info));
+        }
         for (size_t i = 0; char c: info.text) {
             state.impl->set_cell(info.pos.col + i, info.pos.row, c, info.style);
             i++;
         }
+    }
+
+    template<class... Ts>
+    struct overloaded : Ts... {
+        using Ts::operator()...;
+    };
+    // Some compilers might require this explicit deduction guide
+    template<class... Ts>
+    overloaded(Ts...) -> overloaded<Ts...>;
+
+    bool PollEvent(State &state, Event &event) {
+        if (internal::PollRawEvent(event)) {
+            std::visit(
+                    overloaded{
+                            [&](const KeyEvent &ev) {
+                                state.impl->key_states[ev.key_code] = KeyState{.printable = is_print(ev.key_char), .down = ev.key_down};
+                            },
+                            [&](const MouseEvent &ev) {
+                                switch (ev.kind) {
+                                case MouseEventKind::MOVED:
+                                    state.impl->mouse_pos = ev.pos;
+                                    break;
+                                case MouseEventKind::SCROLL_DOWN:
+                                    state.impl->mouse_scroll_v++;
+                                    break;
+                                case MouseEventKind::SCROLL_UP:
+                                    state.impl->mouse_scroll_v--;
+                                    break;
+                                case MouseEventKind::SCROLL_LEFT:
+                                    state.impl->mouse_scroll_h--;
+                                    break;
+                                case MouseEventKind::SCROLL_RIGHT:
+                                    state.impl->mouse_scroll_h++;
+                                    break;
+                                default:
+                                    break;
+                                }
+                            },
+                            [](const auto &) {}
+                    },
+                    event
+            );
+            return true;
+        }
+        return false;
+    }
+
+    bool IsKeyPressed(const State &state, KeyCode key_code) {
+        if (const auto it = state.impl->key_states.find(key_code); it != state.impl->key_states.end())
+            return it->second.down && it->second.printable;
+        return false;
+    }
+
+    bool IsKeyDown(const State &state, KeyCode key_code) {
+        if (const auto it = state.impl->key_states.find(key_code); it != state.impl->key_states.end())
+            return it->second.down;
+        return false;
+    }
+
+    bool IsKeyUp(const State &state, KeyCode key_code) {
+        return !IsKeyDown(state, key_code);
+    }
+
+    Position GetMousePosition(const State &state) {
+        return state.impl->mouse_pos;
+    }
+
+    intmax_t GetMouseScrollV(const State &state) {
+        return state.impl->mouse_scroll_v;
+    }
+
+    intmax_t GetMouseScrollH(const State &state) {
+        return state.impl->mouse_scroll_h;
     }
 }    // namespace nite
 
@@ -528,7 +646,7 @@ namespace nite
     static bool get_key_mod(WORD virtual_key_code, uint8_t &key_mod);
     static bool get_key_code(WORD virtual_key_code, char key_char, KeyCode &key_code);
 
-    bool PollEvent(Event &event) {
+    bool internal::PollRawEvent(Event &event) {
         // Console input handle
         static const HANDLE h_conin = GetStdHandle(STD_INPUT_HANDLE);
 
@@ -687,14 +805,17 @@ namespace nite
 
     static bool get_key_mod(WORD virtual_key_code, uint8_t &key_mod) {
         switch (virtual_key_code) {
+        case VK_SHIFT:
         case VK_LSHIFT:
         case VK_RSHIFT:
             key_mod = KEY_SHIFT;
             return true;
+        case VK_CONTROL:
         case VK_LCONTROL:
         case VK_RCONTROL:
             key_mod = KEY_CTRL;
             return true;
+        case VK_MENU:
         case VK_LMENU:
         case VK_RMENU:
             key_mod = KEY_ALT;
@@ -706,10 +827,6 @@ namespace nite
         default:
             return false;
         }
-    }
-
-    static inline constexpr bool is_print(char c) {
-        return 32 <= c && c <= 126;
     }
 
     static bool get_key_code(WORD virtual_key_code, char key_char, KeyCode &key_code) {
@@ -955,6 +1072,14 @@ namespace nite
                 return false;
             }
         } else {
+            if ('0' <= virtual_key_code && virtual_key_code <= '9') {
+                key_code = static_cast<KeyCode>(virtual_key_code - '0' + static_cast<int>(KeyCode::K_0));
+                return true;
+            }
+            if ('A' <= virtual_key_code && virtual_key_code <= 'Z') {
+                key_code = static_cast<KeyCode>(virtual_key_code - 'A' + static_cast<int>(KeyCode::K_A));
+                return true;
+            }
             switch (virtual_key_code) {
             case VK_NUMPAD0:
                 key_code = KeyCode::K_0;

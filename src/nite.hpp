@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <memory>
@@ -190,6 +191,26 @@ namespace nite
                 size_t row = 0;
             };
         };
+
+        Position operator+(const Position other) const {
+            return {.col = col + other.col, .row = row + other.row};
+        }
+
+        Position operator-(const Position other) const {
+            return {.col = col - other.col, .row = row - other.row};
+        }
+
+        Position &operator+=(const Position other) {
+            col += other.col;
+            row += other.row;
+            return *this;
+        }
+
+        Position &operator-=(const Position other) {
+            col -= other.col;
+            row -= other.row;
+            return *this;
+        }
 
         constexpr bool operator==(const Position &other) const {
             return x == other.x && y == other.y;
@@ -442,6 +463,9 @@ namespace nite
      * @param style the style of the cell
      */
     void SetCell(State &state, wchar_t value, const Position position, const Style style = {});
+    void SetCellStyle(State &state, const Position position, const Style style);
+    void SetCellBG(State &state, const Position position, const Color color);
+    void SetCellFG(State &state, const Position position, const Color color);
     /**
      * Fills a range of cells on the console window 
      * where \p pos1 and \p pos2 are diagonally opposite.
@@ -557,6 +581,7 @@ namespace nite
         std::string text = {};
         Position pos = {};
         Style style = {};
+        std::function<void(TextInfo &)> on_hover = {};
     };
 
     /**
@@ -968,5 +993,20 @@ namespace nite
 
     using Event = std::variant<KeyEvent, MouseEvent, FocusEvent, ResizeEvent>;
 
-    bool PollEvent(Event &event);
+    namespace internal
+    {
+        bool PollRawEvent(Event &event);
+    }
+
+    bool PollEvent(State &state, Event &event);
+
+    // Keyboard
+    bool IsKeyPressed(const State &state, KeyCode key_code);
+    bool IsKeyDown(const State &state, KeyCode key_code);
+    bool IsKeyUp(const State &state, KeyCode key_code);
+
+    // Mouse
+    Position GetMousePosition(const State &state);
+    intmax_t GetMouseScrollV(const State &state);
+    intmax_t GetMouseScrollH(const State &state);
 }    // namespace nite

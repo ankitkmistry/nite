@@ -1,3 +1,4 @@
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <string>
@@ -76,26 +77,20 @@ int main() {
     Initialize(state);
 
     std::vector<std::string> lines;
-    Position mouse_pos;
+    std::string text;
 
     while (!ShouldWindowClose(state)) {
         Event event;
-        while (PollEvent(event)) {
+        while (PollEvent(state, event)) {
             std::visit(
                     overloaded{
                             [&](const KeyEvent &ev) {
-                                std::string msg;
-                                if (std::isprint(ev.key_char))
-                                    msg = std::format(
-                                            "KeyEvent -> key_down: {}, key_code: {}, key_char: {}", ev.key_down,
-                                            KeyCodeInfo::DebugString(ev.key_code), ev.key_char
-                                    );
-                                else
-                                    msg = std::format("KeyEvent -> key_down: {}, key_code: {}", ev.key_down, KeyCodeInfo::DebugString(ev.key_code));
-
-                                lines.push_back(msg);
-                                if (ev.key_code == KeyCode::K_Q)
-                                    CloseWindow(state);
+                                if (ev.key_down) {
+                                    if (std::isprint(ev.key_char))
+                                        text += ev.key_char;
+                                    if (ev.key_code == KeyCode::K_Q && ev.modifiers & KEY_CTRL)
+                                        CloseWindow(state);
+                                }
                             },
                             [&](const FocusEvent &ev) {
                                 auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));
@@ -114,8 +109,6 @@ int main() {
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse up {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
                                     break;
                                 case MouseEventKind::MOVED:
-                                    mouse_pos = ev.pos;
-                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> mouse moved", ev.pos.col, ev.pos.row));
                                     break;
                                 case MouseEventKind::SCROLL_DOWN:
                                     lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled down", ev.pos.col, ev.pos.row));
@@ -131,7 +124,7 @@ int main() {
                                     break;
                                 }
                             },
-                            [&](const auto &) { lines.push_back("event caught"); },
+                            [&](const auto &) {},
                     },
                     event
             );
@@ -141,28 +134,29 @@ int main() {
 
         hello_test(state, lines);
 
-        auto size = GetBufferSize(state);
+        const Size size = GetBufferSize(state);
 
         FillBackground(state, Color::from_hex(0x0950df));
 
         BeginPane(state, {.col = size.width / 2, .row = 0}, {.width = size.width / 2, .height = 3});
         {
-            DrawBorder(state, BORDER_DEFAULT);
+            // DrawBorder(state, BORDER_DEFAULT);
             FillBackground(state, Color::from_hex(0x165d2a));
-            // Text(state, {
-            //                     .text = std::format("delta time: {:.3f} secs", GetDeltaTime(state)),
-            //                     .pos = {.x = 0,            .y = 0             },
-            //                     .style{.fg = COLOR_WHITE, .mode = STYLE_NO_BG}
-            // });
             Text(state, {
                                 .text = std::format("FPS: {:.2f}", 1 / GetDeltaTime(state)),
-                                .pos = {.x = 1,            .y = 1             },
-                                .style{.fg = COLOR_WHITE, .mode = STYLE_NO_BG}
+                                .pos = {.x = 0,            .y = 0             },
+                                .style{.fg = COLOR_WHITE, .mode = STYLE_NO_BG},
+            });
+            Text(state, {
+                                .text = std::format("{}", text),
+                                .pos = {.x = 0, .y = 1},
+                                .style{.bg = Color::from_hex(0x165d2a), .fg = COLOR_WHITE},
+                                .on_hover = [](TextInfo &info) { info.style.bg = Color::from_hex(0x067bd8); },
             });
         }
         EndPane(state);
 
-        SetCell(state, ' ', mouse_pos, {.bg = COLOR_SILVER});
+        SetCell(state, ' ', GetMousePosition(state), {.bg = COLOR_SILVER});
 
         EndDrawing(state);
     }
@@ -170,3 +164,57 @@ int main() {
     Cleanup();
     return 0;
 }
+
+// std::visit(
+//      overloaded{
+//              [&](const KeyEvent &ev) {
+//                  std::string msg;
+//                  if (std::isprint(ev.key_char))
+//                      msg = std::format(
+//                              "KeyEvent -> key_down: {}, key_code: {}, key_char: {}", ev.key_down,
+//                              KeyCodeInfo::DebugString(ev.key_code), ev.key_char
+//                      );
+//                  else
+//                      msg = std::format("KeyEvent -> key_down: {}, key_code: {}", ev.key_down, KeyCodeInfo::DebugString(ev.key_code));
+//                  lines.push_back(msg);
+//                  if (ev.key_code == KeyCode::K_Q)
+//                      CloseWindow(state);
+//              },
+//              [&](const FocusEvent &ev) {
+//                  auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));
+//                  lines.push_back(msg);
+//              },
+//              [&](const ResizeEvent &ev) {
+//                  auto msg = std::format("ResizeEvent -> window resized {}x{}", ev.size.width, ev.size.height);
+//                  lines.push_back(msg);
+//              },
+//              [&](const MouseEvent &ev) {
+//                  switch (ev.kind) {
+//                  case MouseEventKind::DOWN:
+//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse down {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
+//                      break;
+//                  case MouseEventKind::UP:
+//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse up {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
+//                      break;
+//                  case MouseEventKind::MOVED:
+//                      mouse_pos = ev.pos;
+//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse moved", ev.pos.col, ev.pos.row));
+//                      break;
+//                  case MouseEventKind::SCROLL_DOWN:
+//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled down", ev.pos.col, ev.pos.row));
+//                      break;
+//                  case MouseEventKind::SCROLL_UP:
+//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled up", ev.pos.col, ev.pos.row));
+//                      break;
+//                  case MouseEventKind::SCROLL_LEFT:
+//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled left", ev.pos.col, ev.pos.row));
+//                      break;
+//                  case MouseEventKind::SCROLL_RIGHT:
+//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled right", ev.pos.col, ev.pos.row));
+//                      break;
+//                  }
+//              },
+//              [&](const auto &) { lines.push_back("event caught"); },
+//      },
+//      event
+// );
