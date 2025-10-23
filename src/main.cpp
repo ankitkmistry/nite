@@ -32,7 +32,7 @@ std::string btn_str(MouseButton btn) {
 void hello_test(State &state, std::vector<std::string> &lines) {
     auto size = GetBufferSize(state);
     Text(state, {
-                        .text = "Hello, World",
+                        .text = "Hello, World (Control+q to quit)",
                         .pos = {.col = 0, .row = 0},
     });
     Text(state, {
@@ -47,7 +47,7 @@ void hello_test(State &state, std::vector<std::string> &lines) {
     // DrawLine(state, {.col = 0, .row = size.height - 1}, {.col = size.width, .row = 0}, ' ', {.bg = COLOR_FUCHSIA});
     // DrawLine(state, {.col = 0, .row = 0}, {.col = size.width, .row = size.height}, ' ', {.bg = COLOR_FUCHSIA});
 
-    DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = COLOR_RED});
+    DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = COLOR_RED, .mode = STYLE_RESET | STYLE_BOLD});
 
     const size_t height = size.height - 4;
     const auto start = lines.size() < height ? 0 : lines.size() - height;
@@ -102,25 +102,27 @@ int main() {
                             },
                             [&](const MouseEvent &ev) {
                                 switch (ev.kind) {
-                                case MouseEventKind::DOWN:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse down {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
+                                case MouseEventKind::CLICK:
+                                    lines.push_back(std::format("MouseEvent ({}, {}) -> click {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
                                     break;
-                                case MouseEventKind::UP:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse up {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
+                                case MouseEventKind::DOUBLE_CLICK:
+                                    lines.push_back(
+                                            std::format("MouseEvent ({}, {}) -> double click {}", ev.pos.col, ev.pos.row, btn_str(ev.button))
+                                    );
                                     break;
                                 case MouseEventKind::MOVED:
                                     break;
                                 case MouseEventKind::SCROLL_DOWN:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled down", ev.pos.col, ev.pos.row));
+                                    lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled down", ev.pos.col, ev.pos.row));
                                     break;
                                 case MouseEventKind::SCROLL_UP:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled up", ev.pos.col, ev.pos.row));
+                                    lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled up", ev.pos.col, ev.pos.row));
                                     break;
                                 case MouseEventKind::SCROLL_LEFT:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled left", ev.pos.col, ev.pos.row));
+                                    lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled left", ev.pos.col, ev.pos.row));
                                     break;
                                 case MouseEventKind::SCROLL_RIGHT:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled right", ev.pos.col, ev.pos.row));
+                                    lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled right", ev.pos.col, ev.pos.row));
                                     break;
                                 }
                             },
@@ -152,6 +154,7 @@ int main() {
                                 .pos = {.x = 0, .y = 1},
                                 .style{.bg = Color::from_hex(0x165d2a), .fg = COLOR_WHITE},
                                 .on_hover = [](TextInfo &info) { info.style.bg = Color::from_hex(0x067bd8); },
+                                .on_click = [&](TextInfo &) { text = "clicked"; },
             });
         }
         EndPane(state);

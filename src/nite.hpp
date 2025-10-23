@@ -236,6 +236,9 @@ namespace nite
             return !(*this == other);
         }
     };
+
+    template<typename T>
+    using Handler = std::function<void(T &)>;
 }    // namespace nite
 
 // --------------------------------
@@ -581,7 +584,10 @@ namespace nite
         std::string text = {};
         Position pos = {};
         Style style = {};
-        std::function<void(TextInfo &)> on_hover = {};
+        Handler<TextInfo> on_hover = {};
+        Handler<TextInfo> on_click = {};
+        Handler<TextInfo> on_click2 = {};
+        Handler<TextInfo> on_menu = {};
     };
 
     /**
@@ -961,8 +967,8 @@ namespace nite
     };
 
     enum class MouseEventKind {
-        DOWN,
-        UP,
+        CLICK,
+        DOUBLE_CLICK,
         MOVED,
         SCROLL_DOWN,
         SCROLL_UP,
@@ -1006,6 +1012,8 @@ namespace nite
     bool IsKeyUp(const State &state, KeyCode key_code);
 
     // Mouse
+    bool IsMouseClicked(const State &state, const MouseButton button);
+    bool IsMouseDoubleClicked(const State &state, const MouseButton button);
     Position GetMousePosition(const State &state);
     intmax_t GetMouseScrollV(const State &state);
     intmax_t GetMouseScrollH(const State &state);

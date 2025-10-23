@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -70,11 +71,17 @@ namespace nite
         bool down = false;
     };
 
+    enum class BtnState { NONE, CLICK, CLICK2 };
+
     struct State::StateImpl {
         bool closed = false;
 
         // Events mechanism
         std::unordered_map<KeyCode, KeyState> key_states;
+
+        std::array<BtnState, 3> btn_states;
+        static_assert(3 == static_cast<int>(MouseButton::RIGHT) + 1, "Size of the array must match");
+
         Position mouse_pos;
         intmax_t mouse_scroll_v = 0;
         intmax_t mouse_scroll_h = 0;
@@ -173,6 +180,8 @@ namespace nite
     void EndDrawing(State &state) {
         state.impl->mouse_scroll_v = 0;
         state.impl->mouse_scroll_h = 0;
+        for (BtnState &state: state.impl->btn_states)
+            state = BtnState::NONE;
 
         state.impl->selected_stack.pop();
 
@@ -394,9 +403,19 @@ namespace nite
     void Text(State &state, TextInfo info) {
         if (internal::Box(info.pos, Size{.width = info.text.size(), .height = 1})
                     .contains(GetMousePosition(state) - state.impl->selected_stack.top()->get_pos())) {
-            if (info.on_hover)
+            if (IsMouseClicked(state, MouseButton::LEFT)) {
+                if (info.on_click)
+                    info.on_click(std::forward<TextInfo &>(info));
+            } else if (IsMouseClicked(state, MouseButton::RIGHT)) {
+                if (info.on_menu)
+                    info.on_menu(std::forward<TextInfo &>(info));
+            } else if (IsMouseDoubleClicked(state, MouseButton::LEFT)) {
+                if (info.on_click2)
+                    info.on_click2(std::forward<TextInfo &>(info));
+            } else if (info.on_hover)
                 info.on_hover(std::forward<TextInfo &>(info));
         }
+
         for (size_t i = 0; char c: info.text) {
             state.impl->set_cell(info.pos.col + i, info.pos.row, c, info.style);
             i++;
@@ -420,6 +439,12 @@ namespace nite
                             },
                             [&](const MouseEvent &ev) {
                                 switch (ev.kind) {
+                                case MouseEventKind::CLICK:
+                                    state.impl->btn_states[static_cast<size_t>(ev.button)] = BtnState::CLICK;
+                                    break;
+                                case MouseEventKind::DOUBLE_CLICK:
+                                    state.impl->btn_states[static_cast<size_t>(ev.button)] = BtnState::CLICK2;
+                                    break;
                                 case MouseEventKind::MOVED:
                                     state.impl->mouse_pos = ev.pos;
                                     break;
@@ -434,8 +459,6 @@ namespace nite
                                     break;
                                 case MouseEventKind::SCROLL_RIGHT:
                                     state.impl->mouse_scroll_h++;
-                                    break;
-                                default:
                                     break;
                                 }
                             },
@@ -462,6 +485,14 @@ namespace nite
 
     bool IsKeyUp(const State &state, KeyCode key_code) {
         return !IsKeyDown(state, key_code);
+    }
+
+    bool IsMouseClicked(const State &state, const MouseButton button) {
+        return state.impl->btn_states[static_cast<size_t>(button)] == BtnState::CLICK;
+    }
+
+    bool IsMouseDoubleClicked(const State &state, const MouseButton button) {
+        return state.impl->btn_states[static_cast<size_t>(button)] == BtnState::CLICK2;
     }
 
     Position GetMousePosition(const State &state) {
@@ -739,12 +770,23 @@ namespace nite
             MouseButton button = MouseButton::NONE;
             switch (info.dwEventFlags) {
             case 0:
-            case DOUBLE_CLICK:
-                kind = MouseEventKind::DOWN;
+                kind = MouseEventKind::CLICK;
                 if (info.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED)
                     button = MouseButton::LEFT;
                 else if (info.dwButtonState & RIGHTMOST_BUTTON_PRESSED)
                     button = MouseButton::RIGHT;
+                else
+                    return false;
+                break;
+            case DOUBLE_CLICK:
+#    undef DOUBLE_CLICK
+                kind = MouseEventKind::DOUBLE_CLICK;
+                if (info.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED)
+                    button = MouseButton::LEFT;
+                else if (info.dwButtonState & RIGHTMOST_BUTTON_PRESSED)
+                    button = MouseButton::RIGHT;
+                else
+                    return false;
                 break;
             case MOUSE_MOVED:
                 kind = MouseEventKind::MOVED;
@@ -767,19 +809,12 @@ namespace nite
                 break;
             }
 
-            MouseEvent mouse_event{
+            event = MouseEvent{
                     .kind = kind,
                     .button = button,
                     .pos = pos,
                     .modifiers = modifiers,
             };
-
-            if (mouse_event.kind == MouseEventKind::DOWN) {
-                MouseEvent new_event = mouse_event;
-                new_event.kind = MouseEventKind::UP;
-                pending_events.push(new_event);
-            }
-            event = mouse_event;
             return true;
         }
         case FOCUS_EVENT: {
