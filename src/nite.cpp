@@ -16,6 +16,8 @@
 
 #if defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) || defined(__TOS_WIN__) || defined(__WINDOWS__)
 #    define OS_WINDOWS
+#else
+#    error "Unsupported platform"
 #endif
 
 #define null (nullptr)
@@ -157,17 +159,17 @@ namespace nite
         return state.impl->closed;
     }
 
-    bool Initialize(State &state) {
-        if (!internal::console::is_tty())
-            return false;
-        if (!internal::console::init())
-            return false;
+    Result Initialize(State &state) {
+        if (const auto result = internal::console::is_tty(); !result)
+            return result;
+        if (const auto result = internal::console::init(); !result)
+            return result;
 
         state.impl->closed = false;
         return true;
     }
 
-    bool Cleanup() {
+    Result Cleanup() {
         return internal::console::restore();
     }
 
@@ -422,6 +424,32 @@ namespace nite
         }
     }
 
+    void TextBox(State &state, TextBoxInfo info) {
+        if (internal::Box(info.pos, info.size).contains(GetMousePosition(state) - state.impl->selected_stack.top()->get_pos())) {
+            if (IsMouseClicked(state, MouseButton::LEFT)) {
+                if (info.on_click)
+                    info.on_click(std::forward<TextBoxInfo &>(info));
+            } else if (IsMouseClicked(state, MouseButton::RIGHT)) {
+                if (info.on_menu)
+                    info.on_menu(std::forward<TextBoxInfo &>(info));
+            } else if (IsMouseDoubleClicked(state, MouseButton::LEFT)) {
+                if (info.on_click2)
+                    info.on_click2(std::forward<TextBoxInfo &>(info));
+            } else if (info.on_hover)
+                info.on_hover(std::forward<TextBoxInfo &>(info));
+        }
+
+        size_t i = 0;
+        for (size_t row = 0; row < info.size.height; row++)
+            for (size_t col = 0; col < info.size.width; col++) {
+                if (i < info.text.size()) {
+                    state.impl->set_cell(info.pos.col + col, info.pos.row + row, info.text[i], info.style);
+                    i++;
+                } else
+                    state.impl->set_cell(info.pos.col + col, info.pos.row + row, ' ', info.style);
+            }
+    }
+
     template<class... Ts>
     struct overloaded : Ts... {
         using Ts::operator()...;
@@ -546,7 +574,7 @@ namespace nite::internal::console
 
 namespace nite::internal::console
 {
-    static ConsoleError get_last_error() {
+    static std::string get_last_error() {
         char err_msg_buf[4096];
         DWORD size = FormatMessage(
                 FORMAT_MESSAGE_FROM_SYSTEM                  // Searches the system message table
@@ -561,14 +589,7 @@ namespace nite::internal::console
 
         if (size == 0)
             return get_last_error();
-        return ConsoleError(std::string{static_cast<const char *>(err_msg_buf), size});
-    }
-
-    bool print(const std::string &text) {
-        static const HANDLE h_con = GetStdHandle(STD_OUTPUT_HANDLE);
-        if (!WriteConsole(h_con, text.c_str(), text.size(), null, null))
-            return false;
-        return true;
+        return std::string{static_cast<const char *>(err_msg_buf), size};
     }
 
     bool is_tty() {
@@ -577,12 +598,39 @@ namespace nite::internal::console
         return GetConsoleMode(h_con, &mode);
     }
 
-    bool size(size_t &width, size_t &height) {
+    Result clear() {
+        static const HANDLE h_con = GetStdHandle(STD_OUTPUT_HANDLE);
+
+        constexpr const COORD coord_screen = {0, 0};    // Top-left corner
+        DWORD chars_written;
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+
+        // Fill the entire screen with blanks.
+        if (!GetConsoleScreenBufferInfo(h_con, &csbi))
+            return std::format("error getting console info: {}", get_last_error());
+        if (!FillConsoleOutputCharacter(h_con, ' ', csbi.dwSize.X * csbi.dwSize.Y, coord_screen, &chars_written))
+            return std::format("error writing to console: {}", get_last_error());
+
+        // Set the buffer attributes.
+        if (!GetConsoleScreenBufferInfo(h_con, &csbi))
+            return std::format("error getting console info: {}", get_last_error());
+        if (!FillConsoleOutputAttribute(
+                    h_con, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, csbi.dwSize.X * csbi.dwSize.Y, coord_screen, &chars_written
+            ))
+            return std::format("error setting console color: {}", get_last_error());
+
+        // Put the cursor in the top left corner.
+        if (!SetConsoleCursorPosition(h_con, coord_screen))
+            return std::format("error setting console position: {}", get_last_error());
+        return true;
+    }
+
+    Result size(size_t &width, size_t &height) {
         static const HANDLE h_con = GetStdHandle(STD_OUTPUT_HANDLE);
 
         CONSOLE_SCREEN_BUFFER_INFO info;
         if (!GetConsoleScreenBufferInfo(h_con, &info))
-            return false;
+            return std::format("error getting console size: {}", get_last_error());
 
         const int columns = info.srWindow.Right - info.srWindow.Left + 1;
         const int rows = info.srWindow.Bottom - info.srWindow.Top + 1;
@@ -591,80 +639,62 @@ namespace nite::internal::console
         return true;
     }
 
-    bool clear() {
+    Result print(const std::string &text) {
         static const HANDLE h_con = GetStdHandle(STD_OUTPUT_HANDLE);
-
-        constexpr const COORD coord_screen = {0, 0};    // Top-left corner
-        DWORD chars_written;
-        CONSOLE_SCREEN_BUFFER_INFO csbi;
-
-        if (!GetConsoleScreenBufferInfo(h_con, &csbi))
-            return false;
-        const DWORD con_size = csbi.dwSize.X * csbi.dwSize.Y;
-        // Fill the entire screen with blanks.
-        if (!FillConsoleOutputCharacter(h_con, ' ', con_size, coord_screen, &chars_written))
-            return false;
-        // Get the current text attribute.
-        if (!GetConsoleScreenBufferInfo(h_con, &csbi))
-            return false;
-        // Set the buffer attributes.
-        if (!FillConsoleOutputAttribute(h_con, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, con_size, coord_screen, &chars_written))
-            return false;
-        // Put the cursor in the top left corner.
-        if (!SetConsoleCursorPosition(h_con, coord_screen))
-            return false;
+        if (!WriteConsole(h_con, text.c_str(), text.size(), null, null))
+            return std::format("error printing to console: {}", get_last_error());
         return true;
     }
 
     static DWORD old_in_mode = 0, old_out_mode = 0;
     static UINT old_console_cp = 0;
 
-    bool init() {
+    Result init() {
         static const HANDLE h_conin = GetStdHandle(STD_INPUT_HANDLE);
         static const HANDLE h_conout = GetStdHandle(STD_OUTPUT_HANDLE);
 
         if (!GetConsoleMode(h_conin, &old_in_mode))
-            return false;
+            return std::format("error getting console in mode: {}", get_last_error());
         if (!GetConsoleMode(h_conout, &old_out_mode))
-            return false;
+            return std::format("error getting console out mode: {}", get_last_error());
         if ((old_console_cp = GetConsoleOutputCP()) == 0)
-            return false;
+            return std::format("error getting console code page: {}", get_last_error());
 
         DWORD out_mode = 0;
         out_mode |= ENABLE_PROCESSED_OUTPUT;
         out_mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
         out_mode |= DISABLE_NEWLINE_AUTO_RETURN;
         if (!SetConsoleMode(h_conout, out_mode))
-            return false;
+            return std::format("error setting console in mode: {}", get_last_error());
 
         DWORD in_mode = 0;
         in_mode |= ENABLE_EXTENDED_FLAGS;
         in_mode |= ENABLE_MOUSE_INPUT;
         in_mode |= ENABLE_WINDOW_INPUT;
         in_mode &= ~ENABLE_QUICK_EDIT_MODE;
-        if (!SetConsoleMode(h_conin, in_mode)) {
-            print(get_last_error().what());
-            return false;
-        }
+        if (!SetConsoleMode(h_conin, in_mode))
+            return std::format("error setting console out mode: {}", get_last_error());
 
         if (!SetConsoleOutputCP(CP_UTF8))
-            return false;
+            return std::format("error setting console code page: {}", get_last_error());
 
         print("\x1b[?1049h");    // Enter alternate buffer
+        print("\x1b[?25l");      // Hide console cursor
         clear();
         return true;
     }
 
-    bool restore() {
-        if (!SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), old_in_mode))
-            return false;
-        if (!SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), old_out_mode))
-            return false;
-        if (!SetConsoleOutputCP(old_console_cp))
-            return false;
-
+    Result restore() {
         clear();
+        print("\x1b[?25h");      // Show console cursor
         print("\x1b[?1049l");    // Exit alternate buffer
+
+        if (!SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), old_in_mode))
+            return std::format("error setting console in mode: {}", get_last_error());
+        if (!SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), old_out_mode))
+            return std::format("error setting console out mode: {}", get_last_error());
+        if (!SetConsoleOutputCP(old_console_cp))
+            return std::format("error setting console code page: {}", get_last_error());
         return true;
     }
 }    // namespace nite::internal::console

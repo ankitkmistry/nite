@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <ctime>
 #include <functional>
-#include <stdexcept>
 #include <string>
 #include <memory>
 #include <variant>
@@ -15,36 +14,29 @@
 
 namespace nite
 {
-    /**
-     * The base error class
-     */
-    class NiteError : public std::runtime_error {
-      public:
-        explicit NiteError(const std::string &msg) : runtime_error(msg) {}
-    };
+    class Result {
+        bool success;
+        std::string message;
 
-    /**
-     * Indicates out of range error
-     */
-    class RangeError : public NiteError {
       public:
-        explicit RangeError() : NiteError("out of range") {}
-    };
+        Result(const std::string &message) : success(false), message(message) {}
 
-    /**
-     * Indicates out of memory
-     */
-    class OutOfMemoryError : public NiteError {
-      public:
-        explicit OutOfMemoryError() : NiteError("out of memory") {}
-    };
+        Result(bool success) : success(success), message() {}
 
-    /**
-     * Indicates some type of console error
-     */
-    class ConsoleError : public NiteError {
-      public:
-        explicit ConsoleError(const std::string &msg) : NiteError(msg) {}
+        Result() = delete;
+        Result(const Result &) = default;
+        Result(Result &&) = default;
+        Result &operator=(const Result &) = default;
+        Result &operator=(Result &&) = default;
+        ~Result() = default;
+
+        operator bool() const {
+            return success;
+        }
+
+        std::string what() const {
+            return message;
+        }
     };
 }    // namespace nite
 
@@ -86,29 +78,29 @@ namespace nite
         }
     };
 
-    inline static const constexpr Color COLOR_WHITE = Color::from_hex(0xFFFFFF);
-    inline static const constexpr Color COLOR_SILVER = Color::from_hex(0xC0C0C0);
-    inline static const constexpr Color COLOR_GRAY = Color::from_hex(0x808080);
-    inline static const constexpr Color COLOR_BLACK = Color::from_hex(0x000000);
-    inline static const constexpr Color COLOR_RED = Color::from_hex(0xFF0000);
-    inline static const constexpr Color COLOR_MAROON = Color::from_hex(0x800000);
-    inline static const constexpr Color COLOR_YELLOW = Color::from_hex(0xFFFF00);
-    inline static const constexpr Color COLOR_OLIVE = Color::from_hex(0x808000);
-    inline static const constexpr Color COLOR_LIME = Color::from_hex(0x00FF00);
-    inline static const constexpr Color COLOR_GREEN = Color::from_hex(0x008000);
-    inline static const constexpr Color COLOR_AQUA = Color::from_hex(0x00FFFF);
-    inline static const constexpr Color COLOR_TEAL = Color::from_hex(0x008080);
-    inline static const constexpr Color COLOR_BLUE = Color::from_hex(0x0000FF);
-    inline static const constexpr Color COLOR_NAVY = Color::from_hex(0x000080);
-    inline static const constexpr Color COLOR_FUCHSIA = Color::from_hex(0xFF00FF);
-    inline static const constexpr Color COLOR_PURPLE = Color::from_hex(0x800080);
+#define COLOR_WHITE     (Color::from_hex(0xFFFFFF))
+#define COLOR_SILVER    (Color::from_hex(0xC0C0C0))
+#define COLOR_GRAY      (Color::from_hex(0x808080))
+#define COLOR_BLACK     (Color::from_hex(0x000000))
+#define COLOR_RED       (Color::from_hex(0xFF0000))
+#define COLOR_MAROON    (Color::from_hex(0x800000))
+#define COLOR_YELLOW    (Color::from_hex(0xFFFF00))
+#define COLOR_OLIVE     (Color::from_hex(0x808000))
+#define COLOR_LIME      (Color::from_hex(0x00FF00))
+#define COLOR_GREEN     (Color::from_hex(0x008000))
+#define COLOR_AQUA      (Color::from_hex(0x00FFFF))
+#define COLOR_TEAL      (Color::from_hex(0x008080))
+#define COLOR_BLUE      (Color::from_hex(0x0000FF))
+#define COLOR_NAVY      (Color::from_hex(0x000080))
+#define COLOR_FUCHSIA   (Color::from_hex(0xFF00FF))
+#define COLOR_PURPLE    (Color::from_hex(0x800080))
 
-    inline static const constexpr uint8_t STYLE_RESET = 1 << 0;
-    inline static const constexpr uint8_t STYLE_BOLD = 1 << 1;
-    inline static const constexpr uint8_t STYLE_UNDERLINE = 1 << 2;
-    inline static const constexpr uint8_t STYLE_INVERSE = 1 << 3;
-    inline static const constexpr uint8_t STYLE_NO_FG = 1 << 4;
-    inline static const constexpr uint8_t STYLE_NO_BG = 1 << 5;
+#define STYLE_RESET     (1 << 0)
+#define STYLE_BOLD      (1 << 1)
+#define STYLE_UNDERLINE (1 << 2)
+#define STYLE_INVERSE   (1 << 3)
+#define STYLE_NO_FG     (1 << 4)
+#define STYLE_NO_BG     (1 << 5)
 
     /**
      * Represent the style of a cell
@@ -137,7 +129,7 @@ namespace nite
 
     struct BorderChar {
         wchar_t value;
-        Style style;
+        Style style = {};
     };
 
     /**
@@ -181,15 +173,13 @@ namespace nite
      */
     struct Position {
         union {
-            struct {
-                size_t x;
-                size_t y;
-            };
+            size_t x;
+            size_t col = 0;
+        };
 
-            struct {
-                size_t col = 0;
-                size_t row = 0;
-            };
+        union {
+            size_t y;
+            size_t row = 0;
         };
 
         Position operator+(const Position other) const {
@@ -252,15 +242,16 @@ namespace nite
         namespace console
         {
             bool is_tty();
-            bool clear();
-            bool size(size_t &width, size_t &height);
-            bool print(const std::string &text);
+            Result clear();
+            Result size(size_t &width, size_t &height);
+            Result print(const std::string &text);
+
             void set_style(const Style style);
             void gotoxy(const size_t col, const size_t row);
             void set_cell(const size_t col, const size_t row, const wchar_t value, const Style style);
 
-            bool init();
-            bool restore();
+            Result init();
+            Result restore();
         };    // namespace console
 
         /**
@@ -406,14 +397,14 @@ namespace nite
      * @return true if operation succeeded
      * @return false if operation failed
      */
-    bool Initialize(State &state);
+    Result Initialize(State &state);
     /**
      * Cleanups the console and restores the terminal state
      * @param state the console state to work on
      * @return true if operation succeeded
      * @return false if operation failed
      */
-    bool Cleanup();
+    Result Cleanup();
 
     /**
      * Returns the size of the console screen buffer for the current frame
@@ -596,6 +587,20 @@ namespace nite
      * @param info 
      */
     void Text(State &state, TextInfo info = {});
+
+    struct TextBoxInfo {
+        std::string text = {};
+        Position pos = {};
+        Size size = {};
+        Style style = {};
+
+        Handler<TextBoxInfo> on_hover = {};
+        Handler<TextBoxInfo> on_click = {};
+        Handler<TextBoxInfo> on_click2 = {};
+        Handler<TextBoxInfo> on_menu = {};
+    };
+
+    void TextBox(State &state, TextBoxInfo info = {});
 }    // namespace nite
 
 // --------------------------------
@@ -604,11 +609,11 @@ namespace nite
 
 namespace nite
 {
-    constexpr const uint8_t KEY_SHIFT = 1 << 0;    // Shift key
-    constexpr const uint8_t KEY_CTRL = 1 << 1;     // Control on macOS, Ctrl on other platforms
-    constexpr const uint8_t KEY_ALT = 1 << 2;      // Option on macOS, Alt on other platforms
-    constexpr const uint8_t KEY_SUPER = 1 << 3;    // Command on macOS, Win key on Windows, Super on other platforms
-    constexpr const uint8_t KEY_META = 1 << 4;     // Meta key
+#define KEY_SHIFT ((uint8_t) (1 << 0))    // Shift key
+#define KEY_CTRL  ((uint8_t) (1 << 1))    // Control on macOS, Ctrl on other platforms
+#define KEY_ALT   ((uint8_t) (1 << 2))    // Option on macOS, Alt on other platforms
+#define KEY_SUPER ((uint8_t) (1 << 3))    // Command on macOS, Win key on Windows, Super on other platforms
+#define KEY_META  ((uint8_t) (1 << 4))    // Meta key
 
     enum class KeyCode {
         // Alphabet keys

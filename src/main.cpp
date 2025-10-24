@@ -1,6 +1,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <iostream>
 #include <string>
 #include <variant>
 #include <vector>
@@ -74,7 +75,10 @@ void color_test(State &state) {
 
 int main() {
     auto &state = GetState();
-    Initialize(state);
+    if (const auto result = Initialize(state); !result) {
+        std::cout << result.what() << std::endl;
+        return 1;
+    }
 
     std::vector<std::string> lines;
     std::string text;
@@ -149,12 +153,13 @@ int main() {
                                 .pos = {.x = 0,            .y = 0             },
                                 .style{.fg = COLOR_WHITE, .mode = STYLE_NO_BG},
             });
-            Text(state, {
-                                .text = std::format("{}", text),
-                                .pos = {.x = 0, .y = 1},
-                                .style{.bg = Color::from_hex(0x165d2a), .fg = COLOR_WHITE},
-                                .on_hover = [](TextInfo &info) { info.style.bg = Color::from_hex(0x067bd8); },
-                                .on_click = [&](TextInfo &) { text = "clicked"; },
+            TextBox(state, {
+                                   .text = std::format("{}", text),
+                                   .pos = {.x = 0, .y = 1},
+                                   .size = {GetPaneSize(state).width, 2},
+                                   .style{.bg = Color::from_hex(0x165d2a), .fg = COLOR_WHITE},
+                                   .on_hover = [](TextBoxInfo &info) { info.style.bg = Color::from_hex(0x067bd8); },
+                                   .on_click = [&](TextBoxInfo &) { text = "clicked"; },
             });
         }
         EndPane(state);
