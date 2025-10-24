@@ -127,8 +127,8 @@ namespace nite
         }
     };
 
-    struct BorderChar {
-        wchar_t value;
+    struct StyledChar {
+        wchar_t value = '\0';
         Style style = {};
     };
 
@@ -150,13 +150,13 @@ namespace nite
      *  | + |
      *  + - +
      */
-    struct BorderInfo {
-        BorderChar top_left, top, top_right;
-        BorderChar left, center, right;
-        BorderChar bottom_left, bottom, bottom_right;
+    struct Border {
+        StyledChar top_left, top, top_right;
+        StyledChar left, center, right;
+        StyledChar bottom_left, bottom, bottom_right;
     };
 
-    inline static const constexpr BorderInfo BORDER_DEFAULT = {
+    inline static const constexpr Border BORDER_DEFAULT = {
             {'+', {}},
             {'-', {}},
             {'+', {}},
@@ -165,6 +165,22 @@ namespace nite
             {'|', {}},
             {'+', {}},
             {'-', {}},
+            {'+', {}},
+    };
+
+    struct ScrollBar {
+        StyledChar top, v_bar, v_node, bottom;
+        StyledChar left, h_bar, h_node, right;
+    };
+
+    inline static const constexpr ScrollBar SCROLL_DEFAULT = {
+            {'+', {}},
+            {'|', {}},
+            {'*', {}},
+            {'+', {}},
+            {'+', {}},
+            {'-', {}},
+            {'*', {}},
             {'+', {}},
     };
 
@@ -549,11 +565,25 @@ namespace nite
     void DrawLine(State &state, const Position start, const Position end, wchar_t fill, const Style style = {});
 
     void BeginPane(State &state, const Position top_left, const Size size);
+
+    struct ScrollPaneInfo {
+        Position pos = {};
+        Size min_size = {};
+        Size max_size = {};
+        ScrollBar scroll_bar = SCROLL_DEFAULT;
+        float scroll_factor = 1.0f;
+        bool show_scroll_bar = true;
+
+        Handler<ScrollPaneInfo> on_vscroll = {};
+        Handler<ScrollPaneInfo> on_hscroll = {};
+    };
+
+    void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info);
     // void BeginGridPane(State &state, const Position top_left, const Size size);
     // void BeginGridCell(State &state, size_t index);
     void EndPane(State &state);
 
-    void DrawBorder(State &state, BorderInfo info);
+    void DrawBorder(State &state, Border border);
 
     /*
     --+++-||+--+--
@@ -586,7 +616,7 @@ namespace nite
      * @param state 
      * @param info 
      */
-    void Text(State &state, TextInfo info = {});
+    void Text(State &state, TextInfo info);
 
     struct TextBoxInfo {
         std::string text = {};
@@ -600,7 +630,7 @@ namespace nite
         Handler<TextBoxInfo> on_menu = {};
     };
 
-    void TextBox(State &state, TextBoxInfo info = {});
+    void TextBox(State &state, TextBoxInfo info);
 }    // namespace nite
 
 // --------------------------------
@@ -1019,6 +1049,8 @@ namespace nite
     // Mouse
     bool IsMouseClicked(const State &state, const MouseButton button);
     bool IsMouseDoubleClicked(const State &state, const MouseButton button);
+    size_t GetMouseClickCount(const State &state, const MouseButton button);
+    size_t GetMouseClick2Count(const State &state, const MouseButton button);
     Position GetMousePosition(const State &state);
     intmax_t GetMouseScrollV(const State &state);
     intmax_t GetMouseScrollH(const State &state);

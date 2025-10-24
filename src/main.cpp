@@ -30,7 +30,7 @@ std::string btn_str(MouseButton btn) {
     }
 }
 
-void hello_test(State &state, std::vector<std::string> &lines) {
+void hello_test(State &state) {
     auto size = GetBufferSize(state);
     Text(state, {
                         .text = "Hello, World (Control+q to quit)",
@@ -49,13 +49,6 @@ void hello_test(State &state, std::vector<std::string> &lines) {
     // DrawLine(state, {.col = 0, .row = 0}, {.col = size.width, .row = size.height}, ' ', {.bg = COLOR_FUCHSIA});
 
     DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = COLOR_RED, .mode = STYLE_RESET | STYLE_BOLD});
-
-    const size_t height = size.height - 4;
-    const auto start = lines.size() < height ? 0 : lines.size() - height;
-    for (size_t i = start, j = 0; i < lines.size(); i++, j++)
-        Text(state, {
-                            .text = lines[i], .pos = {.col = 0, .row = 4 + j}
-        });
 }
 
 void color_test(State &state) {
@@ -75,13 +68,11 @@ void color_test(State &state) {
 
 int main() {
     auto &state = GetState();
-    if (const auto result = Initialize(state); !result) {
-        std::cout << result.what() << std::endl;
-        return 1;
-    }
+    Initialize(state);
 
     std::vector<std::string> lines;
     std::string text;
+    Position scroll_pivot;
 
     while (!ShouldWindowClose(state)) {
         Event event;
@@ -92,6 +83,8 @@ int main() {
                                 if (ev.key_down) {
                                     if (std::isprint(ev.key_char))
                                         text += ev.key_char;
+                                    if (ev.key_code == KeyCode::K_C && ev.modifiers == 0)
+                                        lines.clear();
                                     if (ev.key_code == KeyCode::K_Q && ev.modifiers & KEY_CTRL)
                                         CloseWindow(state);
                                 }
@@ -117,16 +110,16 @@ int main() {
                                 case MouseEventKind::MOVED:
                                     break;
                                 case MouseEventKind::SCROLL_DOWN:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled down", ev.pos.col, ev.pos.row));
+                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled down", ev.pos.col, ev.pos.row));
                                     break;
                                 case MouseEventKind::SCROLL_UP:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled up", ev.pos.col, ev.pos.row));
+                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled up", ev.pos.col, ev.pos.row));
                                     break;
                                 case MouseEventKind::SCROLL_LEFT:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled left", ev.pos.col, ev.pos.row));
+                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled left", ev.pos.col, ev.pos.row));
                                     break;
                                 case MouseEventKind::SCROLL_RIGHT:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled right", ev.pos.col, ev.pos.row));
+                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled right", ev.pos.col, ev.pos.row));
                                     break;
                                 }
                             },
@@ -137,10 +130,28 @@ int main() {
         }
 
         BeginDrawing(state);
-
-        hello_test(state, lines);
-
         const Size size = GetBufferSize(state);
+
+        hello_test(state);
+
+        BeginScrollPane(
+                state, scroll_pivot,
+                {
+                        .pos = {.col = 0,                .row = 4                 },
+                        .min_size = {.width = size.width,     .height = size.height - 4},
+                        .max_size = {.width = size.width * 2, .height = size.height * 2},
+                        .scroll_factor = 1.5,
+                        .show_scroll_bar = true,
+        }
+        );
+        {
+            for (size_t i = 0; i < lines.size(); i++) {
+                Text(state, {
+                                    .text = lines[i], .pos = {.col = 0, .row = i}
+                });
+            }
+        }
+        EndPane(state);
 
         FillBackground(state, Color::from_hex(0x0950df));
 

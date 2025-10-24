@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <ctime>
 #include <cwchar>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <stack>
@@ -31,36 +32,129 @@ namespace nite
     namespace internal
     {
         class Box {
-            Position m_pos;
-            Size m_size;
-
-          public:
+          protected:
             Box() = default;
 
-            Box(const Position &p, const Size &s) : m_pos(p), m_size(s) {}
+          public:
+            virtual ~Box() = default;
 
-            void set_pos(const Position &p) {
-                m_pos = p;
+            virtual void set_pos(const Position &p) = 0;
+            virtual Position get_pos() const = 0;
+            virtual void set_size(const Size &p) = 0;
+            virtual Size get_size() const = 0;
+            virtual bool contains(const size_t col, const size_t row) const = 0;
+            virtual bool contains(const Position pos) const = 0;
+            virtual bool transform(size_t &col, size_t &row) const = 0;
+        };
+
+        class StaticBox : public Box {
+            Position pos;
+            Size size;
+
+          public:
+            StaticBox(const Position &p, const Size &s) : pos(p), size(s) {}
+
+            StaticBox() = default;
+            ~StaticBox() = default;
+
+            void set_pos(const Position &p) override {
+                pos = p;
             }
 
-            Position get_pos() const {
-                return m_pos;
+            Position get_pos() const override {
+                return pos;
             }
 
-            void set_size(const Size &s) {
-                m_size = s;
+            void set_size(const Size &s) override {
+                size = s;
             }
 
-            Size get_size() const {
-                return m_size;
+            Size get_size() const override {
+                return size;
             }
 
-            bool contains(const size_t col, const size_t row) const {
-                return m_pos.col <= col && col < m_pos.col + m_size.width && m_pos.row <= row && row < m_pos.row + m_size.height;
+            bool contains(const size_t col, const size_t row) const override {
+                return pos.col <= col && col < pos.col + size.width && pos.row <= row && row < pos.row + size.height;
             }
 
-            bool contains(const Position pos) const {
+            bool contains(const Position pos) const override {
                 return contains(pos.col, pos.row);
+            }
+
+            bool transform(size_t &col, size_t &row) const override {
+                col += pos.col;
+                row += pos.row;
+                return true;
+            }
+        };
+
+        class ViewBox : public Box {
+            bool scroll_bar;
+            ScrollBar scroll_style;
+            Position pos;
+            Position pivot;
+            Size min_size;
+            Size max_size;
+
+          public:
+            ViewBox(bool show_scroll_bar, const ScrollBar &scroll_style, const Position pos, const Position pivot, const Size min_size,
+                    const Size max_size)
+                : scroll_bar(show_scroll_bar), scroll_style(scroll_style), pos(pos), pivot(pivot), min_size(min_size), max_size(max_size) {}
+
+            ViewBox() = default;
+            ~ViewBox() = default;
+
+            bool show_scroll_bar() const {
+                return scroll_bar;
+            }
+
+            const ScrollBar &get_scroll_style() const {
+                return scroll_style;
+            }
+
+            Position get_pivot() const {
+                return pivot;
+            }
+
+            Size get_min_size() const {
+                return min_size;
+            }
+
+            Size get_max_size() const {
+                return max_size;
+            }
+
+            void set_pos(const Position &p) override {
+                pos = p;
+            }
+
+            Position get_pos() const override {
+                return pos;
+            }
+
+            void set_size(const Size &s) override {
+                min_size = s;
+            }
+
+            Size get_size() const override {
+                return min_size;
+            }
+
+            bool contains(const size_t col, const size_t row) const override {
+                return pos.col <= col && col < pos.col + min_size.width && pos.row <= row && row < pos.row + min_size.height;
+            }
+
+            bool contains(const Position pos) const override {
+                return contains(pos.col, pos.row);
+            }
+
+            bool transform(size_t &col, size_t &row) const override {
+                if (pivot.col <= col && col < pivot.col + min_size.width && pivot.row <= row && row < pivot.row + min_size.height) {
+                    col = col + pos.col - pivot.col;
+                    row = row + pos.row - pivot.row;
+                    return true;
+                }
+                return false;
             }
         };
     }    // namespace internal
@@ -73,7 +167,10 @@ namespace nite
         bool down = false;
     };
 
-    enum class BtnState { NONE, CLICK, CLICK2 };
+    struct BtnState {
+        size_t click1_count = 0;
+        size_t click2_count = 0;
+    };
 
     struct State::StateImpl {
         bool closed = false;
@@ -95,30 +192,36 @@ namespace nite
 
         StateImpl() = default;
 
+        internal::Box &get_selected() {
+            return *selected_stack.top();
+        }
+
         bool set_cell(size_t col, size_t row, wchar_t value, const Style style) {
-            internal::Box &selected = *selected_stack.top();
-            col += selected.get_pos().col;
-            row += selected.get_pos().row;
+            internal::Box &selected = get_selected();
+            if (!selected.transform(col, row))
+                return false;
+            if (!selected.contains(col, row))
+                return false;
 
             internal::CellBuffer &buffer = swapchain.back();
-            if (buffer.contains(col, row) && selected.contains(col, row)) {
-                internal::Cell &cell = buffer.at(col, row);
-                cell.value = value;
-                if ((style.mode & STYLE_NO_FG) == 0)
-                    cell.style.fg = style.fg;
-                if ((style.mode & STYLE_NO_BG) == 0)
-                    cell.style.bg = style.bg;
-                // cell.style.mode = cell.style.mode;
-                cell.style.mode = style.mode & ~(STYLE_NO_FG | STYLE_NO_BG);
-                return true;
-            }
-            return false;
+            if (!buffer.contains(col, row))
+                return false;
+
+            internal::Cell &cell = buffer.at(col, row);
+            cell.value = value;
+            if ((style.mode & STYLE_NO_FG) == 0)
+                cell.style.fg = style.fg;
+            if ((style.mode & STYLE_NO_BG) == 0)
+                cell.style.bg = style.bg;
+            // cell.style.mode = cell.style.mode;
+            cell.style.mode = style.mode & ~(STYLE_NO_FG | STYLE_NO_BG);
+            return true;
         }
 
         internal::Cell &get_cell(size_t col, size_t row) {
             static internal::Cell sentinel;
 
-            internal::Box &selected = *selected_stack.top();
+            internal::Box &selected = get_selected();
             col += selected.get_pos().col;
             row += selected.get_pos().row;
 
@@ -148,7 +251,7 @@ namespace nite
     }
 
     Size GetPaneSize(State &state) {
-        return state.impl->selected_stack.top()->get_size();
+        return state.impl->get_selected().get_size();
     }
 
     double GetDeltaTime(State &state) {
@@ -160,8 +263,8 @@ namespace nite
     }
 
     Result Initialize(State &state) {
-        if (const auto result = internal::console::is_tty(); !result)
-            return result;
+        if (!internal::console::is_tty())
+            return "cannot initialize in a non-terminal environment";
         if (const auto result = internal::console::init(); !result)
             return result;
 
@@ -176,14 +279,14 @@ namespace nite
     void BeginDrawing(State &state) {
         internal::CellBuffer buf(GetWindowSize());
         state.impl->swapchain.push(buf);
-        state.impl->selected_stack.push(std::make_unique<internal::Box>(Position{.col = 0, .row = 0}, buf.size()));
+        state.impl->selected_stack.push(std::make_unique<internal::StaticBox>(Position{.col = 0, .row = 0}, buf.size()));
     }
 
     void EndDrawing(State &state) {
         state.impl->mouse_scroll_v = 0;
         state.impl->mouse_scroll_h = 0;
         for (BtnState &state: state.impl->btn_states)
-            state = BtnState::NONE;
+            state = {};
 
         state.impl->selected_stack.pop();
 
@@ -299,7 +402,7 @@ namespace nite
     }
 
     void FillBackground(State &state, const Color color) {
-        internal::Box &selected = *state.impl->selected_stack.top();
+        internal::Box &selected = state.impl->get_selected();
 
         for (size_t row = 0; row < selected.get_size().height; row++)
             for (size_t col = 0; col < selected.get_size().width; col++) {
@@ -348,7 +451,7 @@ namespace nite
     }
 
     void FillForeground(State &state, const Color color) {
-        internal::Box &selected = *state.impl->selected_stack.top();
+        internal::Box &selected = state.impl->get_selected();
 
         for (size_t row = 0; row < selected.get_size().height; row++)
             for (size_t col = 0; col < selected.get_size().width; col++) {
@@ -366,6 +469,9 @@ namespace nite
         if (col_start == col_end)
             for (size_t row = row_start; row < row_end; row++)
                 state.impl->set_cell(col_start, row, fill, style);
+        else if (row_start == row_end)
+            for (size_t col = col_start; col < col_end; col++)
+                state.impl->set_cell(col, row_start, fill, style);
         else {
             for (size_t col = col_start; col < col_end; col++) {
                 const double row = std::lerp(row_start, row_end, (col - col_start) / std::abs(1. * col_end - col_start));
@@ -375,36 +481,147 @@ namespace nite
     }
 
     void BeginPane(State &state, const Position top_left, const Size size) {
-        state.impl->selected_stack.push(std::make_unique<internal::Box>(top_left, size));
+        state.impl->selected_stack.push(std::make_unique<internal::StaticBox>(state.impl->get_selected().get_pos() + top_left, size));
+    }
+
+    static void scroll_vertical(Position &pivot, ScrollPaneInfo &info, intmax_t value) {
+        value *= info.scroll_factor;
+        if (value == 0)
+            return;
+        if (info.on_vscroll)
+            info.on_vscroll(std::forward<ScrollPaneInfo &>(info));
+        if (value > 0) {
+            pivot.row += value;
+        } else if (value < 0) {
+            if (static_cast<size_t>(-value) <= pivot.row)
+                pivot.row += value;
+        }
+        if (pivot.row >= info.max_size.height - info.min_size.height)
+            pivot.row = info.max_size.height - info.min_size.height - 1;
+    }
+
+    static void scroll_horizontal(Position &pivot, ScrollPaneInfo &info, intmax_t value) {
+        value *= info.scroll_factor;
+        if (value == 0)
+            return;
+        if (info.on_hscroll)
+            info.on_hscroll(std::forward<ScrollPaneInfo &>(info));
+        if (value > 0) {
+            pivot.col += value;
+        } else if (value < 0) {
+            if (static_cast<size_t>(-value) <= pivot.col)
+                pivot.col += value;
+        }
+        if (pivot.col >= info.max_size.width - info.min_size.width)
+            pivot.col = info.max_size.width - info.min_size.width - 1;
+    }
+
+    void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info) {
+        const auto mouse_pos = GetMousePosition(state) - state.impl->get_selected().get_pos();
+        if (internal::StaticBox(state.impl->get_selected().get_pos() + info.pos, info.min_size).contains(mouse_pos)) {
+            scroll_horizontal(pivot, info, GetMouseScrollH(state));
+            scroll_vertical(pivot, info, GetMouseScrollV(state));
+        }
+
+        const auto left_scroll_btn = Position{.col = 0, .row = info.min_size.height - 1} + info.pos;
+        const auto right_scroll_btn = Position{.col = info.min_size.width - 2, .row = info.min_size.height - 1} + info.pos;
+        const auto top_scroll_btn = Position{.col = info.min_size.width - 1, .row = 0} + info.pos;
+        const auto bottom_scroll_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 2} + info.pos;
+
+        if (mouse_pos == left_scroll_btn)
+            scroll_horizontal(pivot, info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+        if (mouse_pos == right_scroll_btn)
+            scroll_horizontal(pivot, info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+        if (mouse_pos == top_scroll_btn)
+            scroll_vertical(pivot, info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+        if (mouse_pos == bottom_scroll_btn)
+            scroll_vertical(pivot, info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+
+        state.impl->selected_stack.push(
+                std::make_unique<internal::ViewBox>(info.show_scroll_bar, info.scroll_bar, info.pos, pivot, info.min_size, info.max_size)
+        );
     }
 
     void EndPane(State &state) {
+        internal::Box &box = state.impl->get_selected();
+        if (auto vbox = dynamic_cast<internal::ViewBox *>(&box); vbox && vbox->show_scroll_bar()) {
+            const auto &scroll = vbox->get_scroll_style();
+            const auto max_size = vbox->get_max_size();
+            const auto min_size = vbox->get_min_size();
+            const auto pivot = vbox->get_pivot();
+
+            // Vertical scroll
+            if (min_size.height != max_size.height) {
+                const auto vscroll_start = Position{.col = min_size.width - 1, .row = 1} + pivot;
+                const auto vscroll_end = Position{.col = min_size.width - 1, .row = min_size.height - 2} + pivot;
+                DrawLine(state, vscroll_start, vscroll_end, scroll.v_bar.value, scroll.v_bar.style);
+
+                const auto top_scroll_btn = Position{.col = min_size.width - 1, .row = 0} + pivot;
+                const auto bottom_scroll_btn = Position{.col = min_size.width - 1, .row = min_size.height - 2} + pivot;
+                SetCell(state, scroll.top.value, top_scroll_btn, scroll.top.style);
+                SetCell(state, scroll.bottom.value, bottom_scroll_btn, scroll.bottom.style);
+
+                const size_t row = (double) pivot.row / max_size.height * (vscroll_end.row - vscroll_start.row);
+                const auto node_start = Position{.col = min_size.width - 1, .row = row + 1} + pivot;
+                const size_t max_row = (double) (max_size.height - min_size.height - 1) / max_size.height * (vscroll_end.row - vscroll_start.row);
+                const size_t node_height = (vscroll_end.row - vscroll_start.row) - max_row;
+                DrawLine(state, node_start, {.col = node_start.col, .row = node_start.row + node_height}, scroll.v_node.value, scroll.v_node.style);
+
+                // const auto right_cell = Position{.col = min_size.width - 1, .row = min_size.height - 1} + pivot;
+                // SetCell(state, ' ', right_cell, {.mode = STYLE_NO_BG | STYLE_NO_FG});
+            }
+            // Horizontal scroll
+            if (min_size.width != max_size.width) {
+                const auto hscroll_start = Position{.col = 1, .row = min_size.height - 1} + pivot;
+                const auto hscroll_end = Position{.col = min_size.width - 2, .row = min_size.height - 1} + pivot;
+                DrawLine(state, hscroll_start, hscroll_end, scroll.h_bar.value, scroll.h_bar.style);
+
+                const auto left_scroll_btn = Position{.col = 0, .row = min_size.height - 1} + pivot;
+                const auto right_scroll_btn = Position{.col = min_size.width - 2, .row = min_size.height - 1} + pivot;
+                SetCell(state, scroll.left.value, left_scroll_btn, scroll.left.style);
+                SetCell(state, scroll.right.value, right_scroll_btn, scroll.right.style);
+
+                const size_t col = (double) pivot.col / max_size.width * (hscroll_end.col - hscroll_start.col);
+                const auto node_start = Position{.col = col + 1, .row = min_size.height - 1} + pivot;
+                const size_t max_col = (double) (max_size.width - min_size.width - 1) / max_size.width * (hscroll_end.col - hscroll_start.col);
+                const size_t node_width = (hscroll_end.col - hscroll_start.col) - max_col;
+                DrawLine(state, node_start, {.col = node_start.col + node_width, .row = node_start.row}, scroll.h_node.value, scroll.h_node.style);
+            }
+        }
         state.impl->selected_stack.pop();
     }
 
-    void DrawBorder(State &state, BorderInfo info) {
-        const internal::Box &selected = *state.impl->selected_stack.top();
+    void DrawBorder(State &state, Border border) {
+        const internal::Box &selected = state.impl->get_selected();
 
-        SetCell(state, info.top_left.value, {.col = 0, .row = 0}, info.top_left.style);
-        SetCell(state, info.top_right.value, {.col = selected.get_size().width - 1, .row = 0}, info.top_right.style);
-        SetCell(state, info.bottom_left.value, {.col = 0, .row = selected.get_size().height - 1}, info.bottom_left.style);
-        SetCell(state, info.bottom_right.value, {.col = selected.get_size().width - 1, .row = selected.get_size().height - 1},
-                info.bottom_right.style);
+        if (border.top_left.value != '\0')
+            SetCell(state, border.top_left.value, {.col = 0, .row = 0}, border.top_left.style);
+        if (border.top_right.value != '\0')
+            SetCell(state, border.top_right.value, {.col = selected.get_size().width - 1, .row = 0}, border.top_right.style);
+        if (border.bottom_left.value != '\0')
+            SetCell(state, border.bottom_left.value, {.col = 0, .row = selected.get_size().height - 1}, border.bottom_left.style);
+        if (border.bottom_right.value != '\0')
+            SetCell(state, border.bottom_right.value, {.col = selected.get_size().width - 1, .row = selected.get_size().height - 1},
+                    border.bottom_right.style);
 
         for (size_t row = 1; row < selected.get_size().height - 1; row++) {
-            SetCell(state, info.left.value, {.col = 0, .row = row}, info.left.style);
-            SetCell(state, info.right.value, {.col = selected.get_size().width - 1, .row = row}, info.right.style);
+            if (border.left.value != '\0')
+                SetCell(state, border.left.value, {.col = 0, .row = row}, border.left.style);
+            if (border.right.value != '\0')
+                SetCell(state, border.right.value, {.col = selected.get_size().width - 1, .row = row}, border.right.style);
         }
 
         for (size_t col = 1; col < selected.get_size().width - 1; col++) {
-            SetCell(state, info.top.value, {.col = col, .row = 0}, info.top.style);
-            SetCell(state, info.bottom.value, {.col = col, .row = selected.get_size().height - 1}, info.bottom.style);
+            if (border.top.value != '\0')
+                SetCell(state, border.top.value, {.col = col, .row = 0}, border.top.style);
+            if (border.bottom.value != '\0')
+                SetCell(state, border.bottom.value, {.col = col, .row = selected.get_size().height - 1}, border.bottom.style);
         }
     }
 
     void Text(State &state, TextInfo info) {
-        if (internal::Box(info.pos, Size{.width = info.text.size(), .height = 1})
-                    .contains(GetMousePosition(state) - state.impl->selected_stack.top()->get_pos())) {
+        if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1})
+                    .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
             if (IsMouseClicked(state, MouseButton::LEFT)) {
                 if (info.on_click)
                     info.on_click(std::forward<TextInfo &>(info));
@@ -425,7 +642,7 @@ namespace nite
     }
 
     void TextBox(State &state, TextBoxInfo info) {
-        if (internal::Box(info.pos, info.size).contains(GetMousePosition(state) - state.impl->selected_stack.top()->get_pos())) {
+        if (internal::StaticBox(info.pos, info.size).contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
             if (IsMouseClicked(state, MouseButton::LEFT)) {
                 if (info.on_click)
                     info.on_click(std::forward<TextBoxInfo &>(info));
@@ -468,10 +685,10 @@ namespace nite
                             [&](const MouseEvent &ev) {
                                 switch (ev.kind) {
                                 case MouseEventKind::CLICK:
-                                    state.impl->btn_states[static_cast<size_t>(ev.button)] = BtnState::CLICK;
+                                    state.impl->btn_states[static_cast<size_t>(ev.button)].click1_count++;
                                     break;
                                 case MouseEventKind::DOUBLE_CLICK:
-                                    state.impl->btn_states[static_cast<size_t>(ev.button)] = BtnState::CLICK2;
+                                    state.impl->btn_states[static_cast<size_t>(ev.button)].click2_count++;
                                     break;
                                 case MouseEventKind::MOVED:
                                     state.impl->mouse_pos = ev.pos;
@@ -516,11 +733,19 @@ namespace nite
     }
 
     bool IsMouseClicked(const State &state, const MouseButton button) {
-        return state.impl->btn_states[static_cast<size_t>(button)] == BtnState::CLICK;
+        return state.impl->btn_states[static_cast<size_t>(button)].click1_count > 0;
     }
 
     bool IsMouseDoubleClicked(const State &state, const MouseButton button) {
-        return state.impl->btn_states[static_cast<size_t>(button)] == BtnState::CLICK2;
+        return state.impl->btn_states[static_cast<size_t>(button)].click2_count > 0;
+    }
+
+    size_t GetMouseClickCount(const State &state, const MouseButton button) {
+        return state.impl->btn_states[static_cast<size_t>(button)].click1_count;
+    }
+
+    size_t GetMouseClick2Count(const State &state, const MouseButton button) {
+        return state.impl->btn_states[static_cast<size_t>(button)].click2_count;
     }
 
     Position GetMousePosition(const State &state) {
