@@ -169,11 +169,13 @@ namespace nite
     };
 
     struct ScrollBar {
+        StyledChar home;
         StyledChar top, v_bar, v_node, bottom;
         StyledChar left, h_bar, h_node, right;
     };
 
     inline static const constexpr ScrollBar SCROLL_DEFAULT = {
+            {'x', {}},
             {'+', {}},
             {'|', {}},
             {'*', {}},
@@ -579,15 +581,22 @@ namespace nite
     };
 
     void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info);
-    // void BeginGridPane(State &state, const Position top_left, const Size size);
-    // void BeginGridCell(State &state, size_t index);
+
+    struct GridPaneInfo {
+        Position pos = {};
+        Size size = {};
+        std::vector<double> col_sizes = {100};
+        std::vector<double> row_sizes = {100};
+    };
+
+    void BeginGridPane(State &state, GridPaneInfo info);
+    void BeginGridCell(State &state, size_t col, size_t row);
+
+    void BeginNoPane(State &state);
+
     void EndPane(State &state);
 
     void DrawBorder(State &state, Border border);
-
-    /*
-    --+++-||+--+--
-    */
 
     // enum class Align {
     //     TOP_LEFT,

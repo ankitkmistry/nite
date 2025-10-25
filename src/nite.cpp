@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <ctime>
 #include <cwchar>
 #include <memory>
@@ -12,6 +13,7 @@
 #include <stack>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 #include "nite.hpp"
 
@@ -45,6 +47,36 @@ namespace nite
             virtual bool contains(const size_t col, const size_t row) const = 0;
             virtual bool contains(const Position pos) const = 0;
             virtual bool transform(size_t &col, size_t &row) const = 0;
+        };
+
+        class NoBox : public Box {
+          public:
+            NoBox() = default;
+            ~NoBox() = default;
+
+            void set_pos(const Position &) {}
+
+            Position get_pos() const {
+                return {};
+            }
+
+            void set_size(const Size &) {}
+
+            Size get_size() const {
+                return {};
+            }
+
+            bool contains(const size_t, const size_t) const {
+                return false;
+            }
+
+            bool contains(const Position) const {
+                return false;
+            }
+
+            bool transform(size_t &, size_t &) const {
+                return false;
+            }
         };
 
         class StaticBox : public Box {
@@ -88,7 +120,7 @@ namespace nite
             }
         };
 
-        class ViewBox : public Box {
+        class ScrollBox : public Box {
             bool scroll_bar;
             ScrollBar scroll_style;
             Position pos;
@@ -97,12 +129,14 @@ namespace nite
             Size max_size;
 
           public:
-            ViewBox(bool show_scroll_bar, const ScrollBar &scroll_style, const Position pos, const Position pivot, const Size min_size,
-                    const Size max_size)
+            ScrollBox(
+                    bool show_scroll_bar, const ScrollBar &scroll_style, const Position pos, const Position pivot, const Size min_size,
+                    const Size max_size
+            )
                 : scroll_bar(show_scroll_bar), scroll_style(scroll_style), pos(pos), pivot(pivot), min_size(min_size), max_size(max_size) {}
 
-            ViewBox() = default;
-            ~ViewBox() = default;
+            ScrollBox() = default;
+            ~ScrollBox() = default;
 
             bool show_scroll_bar() const {
                 return scroll_bar;
@@ -155,6 +189,62 @@ namespace nite
                     return true;
                 }
                 return false;
+            }
+        };
+
+        class GridBox : public Box {
+            Position pos;
+            Size size;
+
+            size_t num_cols;
+            size_t num_rows;
+            std::vector<StaticBox> grid;
+
+          public:
+            GridBox(const Position &p, const Size &s, size_t num_cols, size_t num_rows, const std::vector<StaticBox> &grid)
+                : pos(p), size(s), num_cols(num_cols), num_rows(num_rows), grid(grid) {
+                for (auto &box: this->grid) {
+                    box.set_pos(p + box.get_pos());
+                }
+            }
+
+            GridBox() = default;
+            ~GridBox() = default;
+
+            std::unique_ptr<internal::Box> get_grid_cell(size_t col, size_t row) {
+                if (col >= num_cols || row >= num_rows)
+                    return std::make_unique<internal::NoBox>();
+                return std::make_unique<internal::StaticBox>(grid[row * num_cols + col]);
+            }
+
+            void set_pos(const Position &p) override {
+                pos = p;
+            }
+
+            Position get_pos() const override {
+                return pos;
+            }
+
+            void set_size(const Size &s) override {
+                size = s;
+            }
+
+            Size get_size() const override {
+                return size;
+            }
+
+            bool contains(const size_t col, const size_t row) const override {
+                return pos.col <= col && col < pos.col + size.width && pos.row <= row && row < pos.row + size.height;
+            }
+
+            bool contains(const Position pos) const override {
+                return contains(pos.col, pos.row);
+            }
+
+            bool transform(size_t &col, size_t &row) const override {
+                col += pos.col;
+                row += pos.row;
+                return true;
             }
         };
     }    // namespace internal
@@ -481,6 +571,11 @@ namespace nite
     }
 
     void BeginPane(State &state, const Position top_left, const Size size) {
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
+            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+            return;
+        }
+
         state.impl->selected_stack.push(std::make_unique<internal::StaticBox>(state.impl->get_selected().get_pos() + top_left, size));
     }
 
@@ -488,13 +583,18 @@ namespace nite
         value *= info.scroll_factor;
         if (value == 0)
             return;
-        if (info.on_vscroll)
-            info.on_vscroll(std::forward<ScrollPaneInfo &>(info));
+        if (info.on_vscroll) {
+            const intmax_t abs_value = std::abs(value);
+            for (intmax_t i = 0; i < abs_value; i++)
+                info.on_vscroll(std::forward<ScrollPaneInfo &>(info));
+        }
         if (value > 0) {
             pivot.row += value;
         } else if (value < 0) {
             if (static_cast<size_t>(-value) <= pivot.row)
                 pivot.row += value;
+            else
+                pivot.row = 0;
         }
         if (pivot.row >= info.max_size.height - info.min_size.height)
             pivot.row = info.max_size.height - info.min_size.height - 1;
@@ -504,19 +604,29 @@ namespace nite
         value *= info.scroll_factor;
         if (value == 0)
             return;
-        if (info.on_hscroll)
-            info.on_hscroll(std::forward<ScrollPaneInfo &>(info));
+        if (info.on_hscroll) {
+            const intmax_t abs_value = std::abs(value);
+            for (intmax_t i = 0; i < abs_value; i++)
+                info.on_hscroll(std::forward<ScrollPaneInfo &>(info));
+        }
         if (value > 0) {
             pivot.col += value;
         } else if (value < 0) {
             if (static_cast<size_t>(-value) <= pivot.col)
                 pivot.col += value;
+            else
+                pivot.col = 0;
         }
         if (pivot.col >= info.max_size.width - info.min_size.width)
             pivot.col = info.max_size.width - info.min_size.width - 1;
     }
 
     void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info) {
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
+            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+            return;
+        }
+
         const auto mouse_pos = GetMousePosition(state) - state.impl->get_selected().get_pos();
         if (internal::StaticBox(state.impl->get_selected().get_pos() + info.pos, info.min_size).contains(mouse_pos)) {
             scroll_horizontal(pivot, info, GetMouseScrollH(state));
@@ -527,6 +637,7 @@ namespace nite
         const auto right_scroll_btn = Position{.col = info.min_size.width - 2, .row = info.min_size.height - 1} + info.pos;
         const auto top_scroll_btn = Position{.col = info.min_size.width - 1, .row = 0} + info.pos;
         const auto bottom_scroll_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 2} + info.pos;
+        const auto home_cell_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 1} + info.pos;
 
         if (mouse_pos == left_scroll_btn)
             scroll_horizontal(pivot, info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
@@ -536,15 +647,66 @@ namespace nite
             scroll_vertical(pivot, info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
         if (mouse_pos == bottom_scroll_btn)
             scroll_vertical(pivot, info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+        if (mouse_pos == home_cell_btn && (IsMouseClicked(state, MouseButton::LEFT) || IsMouseDoubleClicked(state, MouseButton::LEFT)))
+            pivot = {};
 
         state.impl->selected_stack.push(
-                std::make_unique<internal::ViewBox>(info.show_scroll_bar, info.scroll_bar, info.pos, pivot, info.min_size, info.max_size)
+                std::make_unique<internal::ScrollBox>(
+                        info.show_scroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
+                )
         );
+    }
+
+    void BeginGridPane(State &state, GridPaneInfo info) {
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
+            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+            return;
+        }
+
+        std::vector<internal::StaticBox> grid;
+        const size_t num_rows = info.row_sizes.size();
+        const size_t num_cols = info.col_sizes.size();
+
+        double row_progress = 0.0;
+        for (size_t row = 0; row < num_rows; row++) {
+            double col_progress = 0.0;
+            for (size_t col = 0; col < num_cols; col++) {
+                Size s = {
+                        .width = static_cast<size_t>(info.col_sizes[col] / 100.0 * info.size.width),
+                        .height = static_cast<size_t>(info.row_sizes[row] / 100.0 * info.size.height),
+                };
+                Position p = {
+                        .col = static_cast<size_t>(col_progress * info.size.width),
+                        .row = static_cast<size_t>(row_progress * info.size.height),
+                };
+                grid.emplace_back(p, s);
+                col_progress += info.col_sizes[col] / 100.0;
+            }
+            row_progress += info.row_sizes[row] / 100.0;
+        }
+
+        auto box = std::make_unique<internal::GridBox>(state.impl->get_selected().get_pos() + info.pos, info.size, num_cols, num_rows, grid);
+        state.impl->selected_stack.push(std::move(box));
+    }
+
+    void BeginGridCell(State &state, size_t col, size_t row) {
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
+            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+            return;
+        }
+        if (const auto grid_box = dynamic_cast<internal::GridBox *>(&state.impl->get_selected()); grid_box)
+            state.impl->selected_stack.push(grid_box->get_grid_cell(col, row));
+        else
+            state.impl->selected_stack.push(std::make_unique<internal::NoBox>());
+    }
+
+    void BeginNoPane(State &state) {
+        state.impl->selected_stack.push(std::make_unique<internal::NoBox>());
     }
 
     void EndPane(State &state) {
         internal::Box &box = state.impl->get_selected();
-        if (auto vbox = dynamic_cast<internal::ViewBox *>(&box); vbox && vbox->show_scroll_bar()) {
+        if (const auto vbox = dynamic_cast<internal::ScrollBox *>(&box); vbox && vbox->show_scroll_bar()) {
             const auto &scroll = vbox->get_scroll_style();
             const auto max_size = vbox->get_max_size();
             const auto min_size = vbox->get_min_size();
@@ -567,8 +729,8 @@ namespace nite
                 const size_t node_height = (vscroll_end.row - vscroll_start.row) - max_row;
                 DrawLine(state, node_start, {.col = node_start.col, .row = node_start.row + node_height}, scroll.v_node.value, scroll.v_node.style);
 
-                // const auto right_cell = Position{.col = min_size.width - 1, .row = min_size.height - 1} + pivot;
-                // SetCell(state, ' ', right_cell, {.mode = STYLE_NO_BG | STYLE_NO_FG});
+                const auto home_cell = Position{.col = min_size.width - 1, .row = min_size.height - 1} + pivot;
+                SetCell(state, scroll.home.value, home_cell, scroll.home.style);
             }
             // Horizontal scroll
             if (min_size.width != max_size.width) {
@@ -620,17 +782,25 @@ namespace nite
     }
 
     void Text(State &state, TextInfo info) {
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
+            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+            return;
+        }
+
         if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1})
                     .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
-            if (IsMouseClicked(state, MouseButton::LEFT)) {
+            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
-                    info.on_click(std::forward<TextInfo &>(info));
-            } else if (IsMouseClicked(state, MouseButton::RIGHT)) {
+                    while (count--)
+                        info.on_click(std::forward<TextInfo &>(info));
+            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
                 if (info.on_menu)
-                    info.on_menu(std::forward<TextInfo &>(info));
-            } else if (IsMouseDoubleClicked(state, MouseButton::LEFT)) {
+                    while (count--)
+                        info.on_menu(std::forward<TextInfo &>(info));
+            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click2)
-                    info.on_click2(std::forward<TextInfo &>(info));
+                    while (count--)
+                        info.on_click2(std::forward<TextInfo &>(info));
             } else if (info.on_hover)
                 info.on_hover(std::forward<TextInfo &>(info));
         }
@@ -643,15 +813,18 @@ namespace nite
 
     void TextBox(State &state, TextBoxInfo info) {
         if (internal::StaticBox(info.pos, info.size).contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
-            if (IsMouseClicked(state, MouseButton::LEFT)) {
+            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
-                    info.on_click(std::forward<TextBoxInfo &>(info));
-            } else if (IsMouseClicked(state, MouseButton::RIGHT)) {
+                    while (count--)
+                        info.on_click(std::forward<TextBoxInfo &>(info));
+            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
                 if (info.on_menu)
-                    info.on_menu(std::forward<TextBoxInfo &>(info));
-            } else if (IsMouseDoubleClicked(state, MouseButton::LEFT)) {
+                    while (count--)
+                        info.on_menu(std::forward<TextBoxInfo &>(info));
+            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click2)
-                    info.on_click2(std::forward<TextBoxInfo &>(info));
+                    while (count--)
+                        info.on_click2(std::forward<TextBoxInfo &>(info));
             } else if (info.on_hover)
                 info.on_hover(std::forward<TextBoxInfo &>(info));
         }

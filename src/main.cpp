@@ -1,7 +1,5 @@
 #include <cctype>
-#include <cmath>
 #include <cstddef>
-#include <iostream>
 #include <string>
 #include <variant>
 #include <vector>
@@ -31,7 +29,52 @@ std::string btn_str(MouseButton btn) {
 }
 
 void hello_test(State &state) {
-    auto size = GetBufferSize(state);
+    static std::vector<std::string> lines;
+    static std::string text;
+    static Position scroll_pivot;
+    Event event;
+    while (PollEvent(state, event)) {
+        std::visit(
+                overloaded{
+                        [&](const KeyEvent &ev) {
+                            if (ev.key_down) {
+                                if (std::isprint(ev.key_char))
+                                    text += ev.key_char;
+                                if (ev.key_code == KeyCode::K_C && ev.modifiers == 0)
+                                    lines.clear();
+                                if (ev.key_code == KeyCode::K_Q && ev.modifiers & KEY_CTRL)
+                                    CloseWindow(state);
+                            }
+                        },
+                        [&](const FocusEvent &ev) {
+                            auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));
+                            lines.push_back(msg);
+                        },
+                        [&](const ResizeEvent &ev) {
+                            auto msg = std::format("ResizeEvent -> window resized {}x{}", ev.size.width, ev.size.height);
+                            lines.push_back(msg);
+                        },
+                        [&](const MouseEvent &ev) {
+                            switch (ev.kind) {
+                            case MouseEventKind::CLICK:
+                                lines.push_back(std::format("MouseEvent ({}, {}) -> click {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
+                                break;
+                            case MouseEventKind::DOUBLE_CLICK:
+                                lines.push_back(std::format("MouseEvent ({}, {}) -> double click {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
+                                break;
+                            default:
+                                break;
+                            }
+                        },
+                        [&](const auto &) {},
+                },
+                event
+        );
+    }
+
+    BeginDrawing(state);
+    const Size size = GetBufferSize(state);
+
     Text(state, {
                         .text = "Hello, World (Control+q to quit)",
                         .pos = {.col = 0, .row = 0},
@@ -44,35 +87,61 @@ void hello_test(State &state) {
                         .text = std::format("Height: {}", size.height),
                         .pos = {.col = 0, .row = 2},
     });
-
-    // DrawLine(state, {.col = 0, .row = size.height - 1}, {.col = size.width, .row = 0}, ' ', {.bg = COLOR_FUCHSIA});
-    // DrawLine(state, {.col = 0, .row = 0}, {.col = size.width, .row = size.height}, ' ', {.bg = COLOR_FUCHSIA});
-
     DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = COLOR_RED, .mode = STYLE_RESET | STYLE_BOLD});
-}
 
-void color_test(State &state) {
-    auto size = GetBufferSize(state);
 
-    for (size_t row = 0; row < size.height; row++)
-        for (size_t col = 0; col < size.width; col++) {
-            uint8_t x = std::lerp(0, 255, 1.0 * col / (size.width - 1));
-            uint8_t y = std::lerp(0, 255, 1.0 * row / (size.height - 1));
-
-            auto t = time(0) * GetDeltaTime(state);
-            auto p = sin(t) * sin(t);
-
-            SetCell(state, ' ', {.col = col, .row = row}, {.bg = Color::from_rgb(255 * p, x, y)});
+    BeginScrollPane(
+            state, scroll_pivot,
+            {
+                    .pos = {.col = 0,                .row = 4                 },
+                    .min_size = {.width = size.width,     .height = size.height - 4},
+                    .max_size = {.width = size.width * 2, .height = size.height * 2},
+                    .scroll_factor = 2,
+                    .show_scroll_bar = true,
+    }
+    );
+    {
+        for (size_t i = 0; i < lines.size(); i++) {
+            Text(state, {
+                                .text = lines[i], .pos = {.col = 0, .row = i}
+            });
         }
+    }
+    EndPane(state);
+
+    FillBackground(state, Color::from_hex(0x0950df));
+
+    BeginPane(state, {.col = size.width / 2, .row = 0}, {.width = size.width / 2, .height = 3});
+    {
+        // DrawBorder(state, BORDER_DEFAULT);
+        FillBackground(state, Color::from_hex(0x165d2a));
+        Text(state, {
+                            .text = std::format("FPS: {:.2f}", 1 / GetDeltaTime(state)),
+                            .pos = {.x = 0,            .y = 0             },
+                            .style{.fg = COLOR_WHITE, .mode = STYLE_NO_BG},
+        });
+        TextBox(state, {
+                               .text = std::format("{}", text),
+                               .pos = {.x = 0, .y = 1},
+                               .size = {GetPaneSize(state).width, 2},
+                               .style{.bg = Color::from_hex(0x165d2a), .fg = COLOR_WHITE},
+                               .on_hover = [](TextBoxInfo &info) { info.style.bg = Color::from_hex(0x067bd8); },
+                               .on_click = [&](TextBoxInfo &) { text = "clicked"; },
+        });
+    }
+    EndPane(state);
+
+    SetCell(state, ' ', GetMousePosition(state), {.bg = COLOR_SILVER});
+
+    EndDrawing(state);
 }
 
 int main() {
     auto &state = GetState();
     Initialize(state);
 
-    std::vector<std::string> lines;
-    std::string text;
-    Position scroll_pivot;
+    int row_diff = 0;
+    int col_diff = 0;
 
     while (!ShouldWindowClose(state)) {
         Event event;
@@ -80,48 +149,9 @@ int main() {
             std::visit(
                     overloaded{
                             [&](const KeyEvent &ev) {
-                                if (ev.key_down) {
-                                    if (std::isprint(ev.key_char))
-                                        text += ev.key_char;
-                                    if (ev.key_code == KeyCode::K_C && ev.modifiers == 0)
-                                        lines.clear();
-                                    if (ev.key_code == KeyCode::K_Q && ev.modifiers & KEY_CTRL)
+                                if (ev.key_down)
+                                    if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
                                         CloseWindow(state);
-                                }
-                            },
-                            [&](const FocusEvent &ev) {
-                                auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));
-                                lines.push_back(msg);
-                            },
-                            [&](const ResizeEvent &ev) {
-                                auto msg = std::format("ResizeEvent -> window resized {}x{}", ev.size.width, ev.size.height);
-                                lines.push_back(msg);
-                            },
-                            [&](const MouseEvent &ev) {
-                                switch (ev.kind) {
-                                case MouseEventKind::CLICK:
-                                    lines.push_back(std::format("MouseEvent ({}, {}) -> click {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
-                                    break;
-                                case MouseEventKind::DOUBLE_CLICK:
-                                    lines.push_back(
-                                            std::format("MouseEvent ({}, {}) -> double click {}", ev.pos.col, ev.pos.row, btn_str(ev.button))
-                                    );
-                                    break;
-                                case MouseEventKind::MOVED:
-                                    break;
-                                case MouseEventKind::SCROLL_DOWN:
-                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled down", ev.pos.col, ev.pos.row));
-                                    break;
-                                case MouseEventKind::SCROLL_UP:
-                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled up", ev.pos.col, ev.pos.row));
-                                    break;
-                                case MouseEventKind::SCROLL_LEFT:
-                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled left", ev.pos.col, ev.pos.row));
-                                    break;
-                                case MouseEventKind::SCROLL_RIGHT:
-                                    // lines.push_back(std::format("MouseEvent ({}, {}) -> scrolled right", ev.pos.col, ev.pos.row));
-                                    break;
-                                }
                             },
                             [&](const auto &) {},
                     },
@@ -130,53 +160,101 @@ int main() {
         }
 
         BeginDrawing(state);
-        const Size size = GetBufferSize(state);
-
-        hello_test(state);
-
-        BeginScrollPane(
-                state, scroll_pivot,
-                {
-                        .pos = {.col = 0,                .row = 4                 },
-                        .min_size = {.width = size.width,     .height = size.height - 4},
-                        .max_size = {.width = size.width * 2, .height = size.height * 2},
-                        .scroll_factor = 1.5,
-                        .show_scroll_bar = true,
+        BeginGridPane(
+                state, {
+                               .pos = {},
+                               .size = GetBufferSize(state),
+                               .col_sizes = {(double) (50 - col_diff), (double) (50 + col_diff)},
+                               .row_sizes = {(double) (50 - row_diff), (double) (50 + row_diff)},
         }
         );
-        {
-            for (size_t i = 0; i < lines.size(); i++) {
-                Text(state, {
-                                    .text = lines[i], .pos = {.col = 0, .row = i}
-                });
-            }
-        }
-        EndPane(state);
 
-        FillBackground(state, Color::from_hex(0x0950df));
-
-        BeginPane(state, {.col = size.width / 2, .row = 0}, {.width = size.width / 2, .height = 3});
+        BeginGridCell(state, 0, 0);
         {
-            // DrawBorder(state, BORDER_DEFAULT);
-            FillBackground(state, Color::from_hex(0x165d2a));
+            Text(state, {"Hello from 0, 0"});
             Text(state, {
-                                .text = std::format("FPS: {:.2f}", 1 / GetDeltaTime(state)),
-                                .pos = {.x = 0,            .y = 0             },
-                                .style{.fg = COLOR_WHITE, .mode = STYLE_NO_BG},
+                                .text = "+ Col",
+                                .pos = {.col = 0, .row = 1},
+                                .on_click =
+                                        [&](const nite::TextInfo &) {
+                                            if (col_diff < 50)
+                                                col_diff++;
+                                        },
+                                .on_click2 =
+                                        [&](const nite::TextInfo &) {
+                                            if (col_diff < 50)
+                                                col_diff++;
+                                        },
             });
-            TextBox(state, {
-                                   .text = std::format("{}", text),
-                                   .pos = {.x = 0, .y = 1},
-                                   .size = {GetPaneSize(state).width, 2},
-                                   .style{.bg = Color::from_hex(0x165d2a), .fg = COLOR_WHITE},
-                                   .on_hover = [](TextBoxInfo &info) { info.style.bg = Color::from_hex(0x067bd8); },
-                                   .on_click = [&](TextBoxInfo &) { text = "clicked"; },
+            Text(state, {
+                                .text = "- Col",
+                                .pos = {.col = 6, .row = 1},
+                                .on_click =
+                                        [&](const nite::TextInfo &) {
+                                            if (col_diff > -50)
+                                                col_diff--;
+                                        },
+                                .on_click2 =
+                                        [&](const nite::TextInfo &) {
+                                            if (col_diff > -50)
+                                                col_diff--;
+                                        },
             });
+            Text(state, {
+                                .text = "+ Row",
+                                .pos = {.col = 0, .row = 2},
+                                .on_click =
+                                        [&](const nite::TextInfo &) {
+                                            if (row_diff < 50)
+                                                row_diff++;
+                                        },
+                                .on_click2 =
+                                        [&](const nite::TextInfo &) {
+                                            if (row_diff < 50)
+                                                row_diff++;
+                                        },
+            });
+            Text(state, {
+                                .text = "- Row",
+                                .pos = {.col = 6, .row = 2},
+                                .on_click =
+                                        [&](const nite::TextInfo &) {
+                                            if (row_diff > -50)
+                                                row_diff--;
+                                        },
+                                .on_click2 =
+                                        [&](const nite::TextInfo &) {
+                                            if (row_diff > -50)
+                                                row_diff--;
+                                        },
+            });
+            FillBackground(state, COLOR_WHITE);
+            FillForeground(state, COLOR_BLACK);
         }
         EndPane(state);
 
-        SetCell(state, ' ', GetMousePosition(state), {.bg = COLOR_SILVER});
+        BeginGridCell(state, 0, 1);
+        {
+            Text(state, {"Hello from 0, 1"});
+            FillBackground(state, COLOR_RED);
+        }
+        EndPane(state);
 
+        BeginGridCell(state, 1, 1);
+        {
+            Text(state, {"Hello from 1, 1"});
+            FillBackground(state, COLOR_BLUE);
+        }
+        EndPane(state);
+
+        BeginGridCell(state, 1, 0);
+        {
+            Text(state, {"Hello from 1, 0"});
+            FillBackground(state, COLOR_GREEN);
+        }
+        EndPane(state);
+
+        EndPane(state);
         EndDrawing(state);
     }
 
