@@ -8,7 +8,7 @@
             "type": "lldb",
             "request": "launch",
             "name": "Launch",
-            "program": "${workspaceFolder}/build/nite.exe",
+            "program": "${workspaceFolder}/build/nite",
             "args": [],
             "cwd": "${workspaceFolder}",
             "terminal": "external"

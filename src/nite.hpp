@@ -1000,6 +1000,7 @@ namespace nite
             case KeyCode::SPACE:
                 return "SPACE";
             }
+            return "";
         }
     };
 
@@ -1007,7 +1008,7 @@ namespace nite
         bool key_down;
         KeyCode key_code;
         char key_char;
-        uint8_t modifiers;
+        uint8_t modifiers = 0;
     };
 
     enum class MouseEventKind {
@@ -1028,9 +1029,9 @@ namespace nite
 
     struct MouseEvent {
         MouseEventKind kind;
-        MouseButton button;
+        MouseButton button = MouseButton::NONE;
         Position pos;
-        uint8_t modifiers;
+        uint8_t modifiers = 0;
     };
 
     struct FocusEvent {
@@ -1041,7 +1042,11 @@ namespace nite
         Size size;
     };
 
-    using Event = std::variant<KeyEvent, MouseEvent, FocusEvent, ResizeEvent>;
+    struct DebugEvent {
+        std::string text;
+    };
+
+    using Event = std::variant<KeyEvent, MouseEvent, FocusEvent, ResizeEvent, DebugEvent>;
 
     namespace internal
     {

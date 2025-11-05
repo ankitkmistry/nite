@@ -13,16 +13,12 @@ project (nite
 set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Set up spdlog
-find_package(spdlog REQUIRED CONFIG)
-
 # Target: nite
 file (GLOB_RECURSE NITE_SRCS src/*.cpp)
 file (GLOB_RECURSE NITE_INCLUDES src/*.hpp)
 
 add_executable (nite ${NITE_SRCS} ${NITE_INCLUDES})
 target_include_directories (nite PRIVATE src)
-target_link_libraries (nite PRIVATE spdlog::spdlog)
 
 if (MSVC)
     # warning level 4

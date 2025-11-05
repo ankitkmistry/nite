@@ -1,16 +1,20 @@
 #include <algorithm>
 #include <array>
+#include <bits/types/struct_timeval.h>
 #include <chrono>
+#include <clocale>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
 #include <cwchar>
 #include <memory>
-#include <optional>
 #include <queue>
 #include <stack>
+#include <sys/select.h>
+#include <sys/types.h>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -19,14 +23,50 @@
 
 #if defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) || defined(__TOS_WIN__) || defined(__WINDOWS__)
 #    define OS_WINDOWS
+#elif defined(linux) || defined(__linux) || defined(__linux__) || defined(__gnu_linux__)
+#    define OS_LINUX
 #else
 #    error "Unsupported platform"
 #endif
 
+#ifdef OS_WINDOWS
+#    include <optional>
+#endif
+
+#ifdef OS_LINUX
+#    include <cerrno>
+#    include <cstring>
+#endif
+
+#define ESC  "\033"
+#define CSI  ESC "["
+
 #define null (nullptr)
+#define $(expr)                                                                                                                                      \
+    if (const auto result = (expr); !result)                                                                                                         \
+    return result
 
 static inline constexpr bool is_print(char c) {
     return 32 <= c && c <= 126;
+}
+
+static std::string wc_to_string(const wchar_t c) {
+    // Create conversion state
+    mbstate_t state;
+    // Zero init state
+    memset(&state, 0, sizeof(mbstate_t));
+    // Get the length
+    size_t len = wcrtomb(null, c, &state);
+    // Create the buffer
+    char *buf = new char[len];
+    // Convert
+    len = wcrtomb(buf, c, &state);
+    // Create the string
+    std::string str(buf, len);
+    // Delete the buffer
+    delete[] buf;
+    // Return the string
+    return str;
 }
 
 namespace nite
@@ -650,11 +690,9 @@ namespace nite
         if (mouse_pos == home_cell_btn && (IsMouseClicked(state, MouseButton::LEFT) || IsMouseDoubleClicked(state, MouseButton::LEFT)))
             pivot = {};
 
-        state.impl->selected_stack.push(
-                std::make_unique<internal::ScrollBox>(
-                        info.show_scroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
-                )
-        );
+        state.impl->selected_stack.push(std::make_unique<internal::ScrollBox>(
+                info.show_scroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
+        ));
     }
 
     void BeginGridPane(State &state, GridPaneInfo info) {
@@ -939,31 +977,32 @@ namespace nite::internal::console
     void set_style(const Style style) {
         // Refer to https://learn.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
         if (style.mode & STYLE_RESET)
-            print("\x1b[0m");
+            print(CSI "0m");
         if (style.mode & STYLE_BOLD)
-            print("\x1b[1m");
+            print(CSI "1m");
         if (style.mode & STYLE_UNDERLINE)
-            print("\x1b[4m");
+            print(CSI "4m");
         if (style.mode & STYLE_INVERSE)
-            print("\x1b[7m");
+            print(CSI "7m");
 
         if ((style.mode & STYLE_NO_FG) == 0)
             // Set foreground color
-            print("\x1b[38;2;" + std::to_string(style.fg.r) + ";" + std::to_string(style.fg.g) + ";" + std::to_string(style.fg.b) + "m");
+            print(CSI "38;2;" + std::to_string(style.fg.r) + ";" + std::to_string(style.fg.g) + ";" + std::to_string(style.fg.b) + "m");
 
         if ((style.mode & STYLE_NO_BG) == 0)
             // Set background color
-            print("\x1b[48;2;" + std::to_string(style.bg.r) + ";" + std::to_string(style.bg.g) + ";" + std::to_string(style.bg.b) + "m");
+            print(CSI "48;2;" + std::to_string(style.bg.r) + ";" + std::to_string(style.bg.g) + ";" + std::to_string(style.bg.b) + "m");
     }
 
     void gotoxy(const size_t col, const size_t row) {
-        print("\x1b[" + std::to_string(row + 1) + ";" + std::to_string(col + 1) + "H");
+        print(CSI "" + std::to_string(row + 1) + ";" + std::to_string(col + 1) + "H");
     }
 
     void set_cell(const size_t col, const size_t row, const wchar_t value, const Style style) {
         gotoxy(col, row);
         set_style(style);
-        std::fputwc(value, stdout);
+        // std::fputwc(value, stdout);
+        print(wc_to_string(value));
     }
 }    // namespace nite::internal::console
 
@@ -1076,16 +1115,16 @@ namespace nite::internal::console
         if (!SetConsoleOutputCP(CP_UTF8))
             return std::format("error setting console code page: {}", get_last_error());
 
-        print("\x1b[?1049h");    // Enter alternate buffer
-        print("\x1b[?25l");      // Hide console cursor
+        print(CSI "?1049h");    // Enter alternate buffer
+        print(CSI "?25l");      // Hide console cursor
         clear();
         return true;
     }
 
     Result restore() {
         clear();
-        print("\x1b[?25h");      // Show console cursor
-        print("\x1b[?1049l");    // Exit alternate buffer
+        print(CSI "?25h");      // Show console cursor
+        print(CSI "?1049l");    // Exit alternate buffer
 
         if (!SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), old_in_mode))
             return std::format("error setting console in mode: {}", get_last_error());
@@ -1100,12 +1139,12 @@ namespace nite::internal::console
 #endif
 
 #ifdef OS_WINDOWS
-namespace nite
+namespace nite::internal
 {
     static bool get_key_mod(WORD virtual_key_code, uint8_t &key_mod);
     static bool get_key_code(WORD virtual_key_code, char key_char, KeyCode &key_code);
 
-    bool internal::PollRawEvent(Event &event) {
+    bool PollRawEvent(Event &event) {
         // Console input handle
         static const HANDLE h_conin = GetStdHandle(STD_INPUT_HANDLE);
 
@@ -1694,5 +1733,527 @@ namespace nite
             }
         }
     }
-}    // namespace nite
+}    // namespace nite::internal
+#endif
+
+#ifdef OS_LINUX
+#    include <unistd.h>
+#    include <termios.h>
+#    include <sys/ioctl.h>
+
+namespace nite::internal::console
+{
+    inline static std::string get_last_error() {
+        return std::strerror(errno);
+    }
+
+    bool is_tty() {
+        return isatty(STDOUT_FILENO);
+    }
+
+    Result clear() {
+        $(print(CSI "2J"));
+        return true;
+    }
+
+    Result size(size_t &width, size_t &height) {
+        struct winsize w;
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == -1)
+            return std::format("error getting console size: {}", get_last_error());
+        width = w.ws_col;
+        height = w.ws_row;
+        return true;
+    }
+
+    Result print(const std::string &text) {
+        if (write(STDOUT_FILENO, text.data(), text.size()) == -1)
+            return std::format("error writing to the console: {}", get_last_error());
+        return true;
+    }
+
+    static struct termios old_term, new_term;
+    static std::string old_locale;
+
+    Result init() {
+        // Refer to: https://www.man7.org/linux/man-pages/man3/termios.3.html
+        if (tcgetattr(STDIN_FILENO, &old_term) == -1)
+            return std::format("error getting terminal attributes: {}", get_last_error());
+        new_term = old_term;
+        cfmakeraw(&new_term);    // enable raw mode
+        // cfmakeraw() does this:
+        //      new_term->c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+        //      new_term->c_oflag &= ~OPOST;
+        //      new_term->c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+        //      new_term->c_cflag &= ~(CSIZE | PARENB);
+        //      new_term->c_cflag |= CS8;
+        new_term.c_cc[VMIN] = 0;     // enable polling read
+        new_term.c_cc[VTIME] = 0;    // enable polling read
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &new_term) == -1)
+            return std::format("error setting terminal attributes: {}", get_last_error());
+
+        // Setup console locale to utf-8
+        old_locale = std::setlocale(LC_CTYPE, NULL);
+        std::setlocale(LC_CTYPE, "en_US.utf8");
+
+        $(print(CSI "?1049h"));    // Enter alternate buffer
+        $(print(CSI "?25l"));      // Hide console cursor
+        clear();
+
+        // Refer to: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
+        // Refer to: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Alt-and-Meta-Keys
+        // -----------+----------------+-----------------+------------
+        // key        | altSendsEscape | metaSendsEscape | result
+        // -----------+----------------+-----------------+------------
+        // x          | ON             | off             | x
+        // Meta+x     | ON             | off             | shift
+        // Alt+x      | ON             | off             | ESC  x
+        // Alt+Meta+x | ON             | off             | ESC  shift
+        // -----------+----------------+-----------------+------------
+
+        // Keyboard specific
+        $(print(CSI ">0;4m"));    // modifyKeyboard=4
+        $(print(CSI ">1;4m"));    // modifyCursorKeys=4
+        $(print(CSI ">2;4m"));    // modifyFunctionKeys=4
+        $(print(CSI ">4;3m"));    // modifyOtherKeys=3
+        $(print(CSI ">6;4m"));    // modifyModifierKeys=4
+        $(print(CSI ">7;4m"));    // modifySpecialKeys=4
+
+        $(print(CSI ">0;1f"));    // formatKeyboard=1
+        $(print(CSI ">1;1f"));    // formatCursorKeys=1
+        $(print(CSI ">2;1f"));    // formatFunctionKeys=1
+        $(print(CSI ">4;1f"));    // formatOtherKeys=1
+        $(print(CSI ">6;1f"));    // formatModifierKeys=1
+        $(print(CSI ">7;1f"));    // formatSpecialKeys=1
+
+        $(print(CSI "?1039h"));    // Send ESC when Alt modifies a key
+
+        // Mouse specific
+        $(print(CSI "?1000h"));    // Send Mouse X & Y on button press and release
+        $(print(CSI "?1002h"));    // Use Cell Motion Mouse Tracking (move and drag tracking)
+        $(print(CSI "?1003h"));    // Use All Motion Mouse Tracking
+        $(print(CSI "?1006h"));    // Enable SGR Mouse Mode
+        // Other specific
+        $(print(CSI "?1004h"));    // Send FocusIn/FocusOut events
+        $(print(CSI "?30l"));      // Do not show scroll bar
+
+        return true;
+    }
+
+    Result restore() {
+        // Other specific
+        $(print(CSI "?30h"));      // Show scroll bar
+        $(print(CSI "?1004l"));    // Do not send FocusIn/FocusOut events
+        // Mouse specific
+        $(print(CSI "?1006l"));    // Disable SGR Mouse Mode
+        $(print(CSI "?1003l"));    // Do not use All Motion Mouse Tracking
+        $(print(CSI "?1002l"));    // Do not use Cell Motion Mouse Tracking (move and drag tracking)
+        $(print(CSI "?1000l"));    // Do not send Mouse X & Y on button press and release
+
+        clear();
+        $(print(CSI "?25h"));      // Show console cursor
+        $(print(CSI "?1049l"));    // Exit alternate buffer
+
+        // Restore locale
+        std::setlocale(LC_CTYPE, old_locale.c_str());
+        // Restore old terminal modes
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &old_term) == -1)
+            return std::format("error setting terminal attributes: {}", get_last_error());
+        return true;
+    }
+}    // namespace nite::internal::console
+
+#endif
+
+#ifdef OS_LINUX
+namespace nite::internal
+{
+    bool get_key_code(char c, KeyCode &key_code);
+
+    bool con_read(std::string &str) {
+        static char buf[256];
+        memset(buf, 0, sizeof(buf));
+
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(STDIN_FILENO, &rfds);
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 2 * 1000;
+
+        int ret = select(STDIN_FILENO + 1, &rfds, null, NULL, &tv);
+        if (ret == -1)
+            return false;    // Call failed
+        if (ret == 0)
+            return false;    // Nothing available
+
+        ssize_t len = read(STDIN_FILENO, buf, sizeof(buf));
+        if (len == -1)
+            return false;    // Call failed
+        if (len == 0)
+            return false;    // Nothing available
+
+        str = std::string(buf, len);
+        return true;
+    }
+
+    // Escape sequence grammar
+    // ----------------------------------------------
+    // text := <sequence>*
+    // sequence :=
+    //      <key_sequence>
+    //    | <mouse_sequence>
+    //    | <focus_sequence>
+    //    ;
+    //
+    // mouse_sequence := CSI '<' NUMBER ';' NUMBER ';' NUMBER 'M';
+    // focus_sequence := CSI ('O' | 'I');
+    //
+    // key_sequence :=
+    //      <CHAR>
+    //    | <ESC> O (P|Q|R|S)                 // Fn keys F1-F4
+    //    | <CSI> 1 (1|2|3|4|5|7|8|9) <modifiers>? ~       // Fn keys F1-F8
+    //    | <CSI> 2 (0|1|2|3|4) <modifiers>? ~             // Fn keys F8-F12
+    //    | <CSI> 1 ; (A|B|C|D)               // Arrow keys
+    //    | <CSI> (A|B|C|D)                   // Arrow keys
+    //    | <CSI> (H|F)                   // Home/end keys
+    //    ;
+    //
+    // ESC      := \033
+    // CSI      := \033\[
+    // DIGIT    := [0-9]+
+    // NUMBER   := DIGIT DIGIT
+    // ----------------------------------------------
+
+    // Key        Escape Sequence
+    // ---------+-----------------------
+    // F1       | SS3 P or CSI 1 1 ~
+    // F2       | SS3 Q or CSI 1 2 ~
+    // F3       | SS3 R or CSI 1 3 ~
+    // F4       | SS3 S or CSI 1 4 ~
+    // F5       | CSI 1 5 ~
+    // F6       | CSI 1 7 ~
+    // F7       | CSI 1 8 ~
+    // F8       | CSI 1 9 ~
+    // F9       | CSI 2 0 ~
+    // F10      | CSI 2 1 ~
+    // F11      | CSI 2 3 ~
+    // F12      | CSI 2 4 ~
+    // ---------+-----------------------
+
+    class Parser {
+        size_t i = 0;
+        std::string text;
+
+        bool parse_mouse(Event &event) {
+            if (!match_csi())
+                return false;
+            if (!match('<'))
+                return false;
+
+            size_t modifier = 0;
+            size_t x_coord = 0;
+            size_t y_coord = 0;
+
+            if (!match_number(modifier))
+                return false;
+            if (!match(';'))
+                return false;
+            if (!match_number(x_coord))
+                return false;
+            if (!match(';'))
+                return false;
+            if (!match_number(y_coord))
+                return false;
+            if (!match_any('M', 'm'))
+                return false;
+
+            // TODO: operate on modifiers
+            event = MouseEvent{
+                    .kind = MouseEventKind::MOVED,
+                    .pos = {.col = x_coord - 1, .row = y_coord - 1},
+            };
+            return true;
+        }
+
+        bool parse_focus(Event &event) {
+            if (!match_csi())
+                return false;
+
+            if (match('O')) {
+                event = FocusEvent{.focus_gained = false};
+                return true;
+            } else if (match('I')) {
+                event = FocusEvent{.focus_gained = true};
+                return true;
+            } else
+                return false;
+        }
+
+        bool parse(Event &event) {
+            const size_t old_index = i;
+            if (parse_mouse(event))
+                return true;
+
+            i = old_index;
+            if (parse_focus(event))
+                return true;
+            return false;
+        }
+
+        bool is_at_end() const {
+            return i >= text.size();
+        }
+
+        bool match_csi() {
+            if (!match('\x1b'))
+                return false;
+            if (!match('['))
+                return false;
+            return true;
+        }
+
+        bool match_digit() {
+            if (const char c = peek(); '0' < c && c < '9') {
+                advance();
+                return true;
+            }
+            return false;
+        }
+
+        bool match_number(size_t &number) {
+            std::string str;
+            while (str.size() <= 4 && match_digit())
+                str += current();
+
+            if (str.empty())
+                return false;
+            number = std::stoi(str);
+            return true;
+        }
+
+        template<typename... Char>
+            requires(std::same_as<Char, char> && ...)
+        bool match_any(Char... chars) {
+            const char p = peek();
+            if (((p == chars) || ...)) {
+                advance();
+                return true;
+            }
+            return false;
+        }
+
+        bool match(char c) {
+            if (peek() == c) {
+                advance();
+                return true;
+            }
+            return false;
+        }
+
+        char current() const {
+            if (i == 0 || i - 1 >= text.size())
+                return '\0';
+            return text[i - 1];
+        }
+
+        char peek() const {
+            if (i >= text.size())
+                return '\0';
+            return text[i];
+        }
+
+        char advance() {
+            if (i >= text.size())
+                return '\0';
+            return text[i++];
+        }
+
+      public:
+        explicit Parser(const std::string &text) : text(text) {}
+
+        ~Parser() = default;
+
+        void parse_events(std::vector<Event> &events) {
+            std::vector<size_t> esc_start_list;
+            for (size_t i = 0; i < text.size(); i++)
+                if (text[i] == '\x1b')
+                    esc_start_list.push_back(i);
+
+            for (const size_t esc_start: esc_start_list) {
+                i = esc_start;
+                if (Event event; parse(event))
+                    events.push_back(event);
+            }
+            // while (!is_at_end()) {
+            //     if (Event event; parse(event))
+            //         events.push_back(event);
+            //     else    // Go to the next escape sequence
+            //         while (peek() != '\x1b' && peek() != '\0')
+            //             advance();
+            // }
+        }
+    };
+
+    bool PollRawEvent(Event &event) {
+        static std::vector<Event> pending_events;
+
+        if (!pending_events.empty()) {
+            event = pending_events.back();
+            pending_events.pop_back();
+            return true;
+        }
+
+        std::string text;
+        if (!con_read(text))
+            return false;
+
+        Parser parser(text);
+        std::vector<Event> events;
+        parser.parse_events(events);
+
+        if (events.empty()) {
+            // return false;
+            event = DebugEvent{.text = std::format("Could not parse: {}", text)};
+            return true;
+        }
+        event = events.front();
+        events.erase(events.begin());
+        for (const Event &event: events)
+            pending_events.push_back(event);
+
+        return true;
+    }
+
+    bool get_key_code(char c, KeyCode &key_code) {
+        switch (c) {
+        case '\033':
+            key_code = KeyCode::ESCAPE;
+            return true;
+        case '\x0a':
+            key_code = KeyCode::ENTER;
+            return true;
+        case '\x0d':
+            key_code = KeyCode::ENTER;
+            return true;
+        case '\x7f':
+            key_code = KeyCode::BACKSPACE;
+            return true;
+        case '\t':
+            key_code = KeyCode::TAB;
+            return true;
+        case ' ':
+            key_code = KeyCode::SPACE;
+            return true;
+
+        case '!':
+            key_code = KeyCode::BANG;
+            return true;
+        case '@':
+            key_code = KeyCode::AT;
+            return true;
+        case '#':
+            key_code = KeyCode::HASH;
+            return true;
+        case '$':
+            key_code = KeyCode::DOLLAR;
+            return true;
+        case '%':
+            key_code = KeyCode::PERCENT;
+            return true;
+        case '^':
+            key_code = KeyCode::CARET;
+            return true;
+        case '&':
+            key_code = KeyCode::AMPERSAND;
+            return true;
+        case '*':
+            key_code = KeyCode::ASTERISK;
+            return true;
+        case '(':
+            key_code = KeyCode::LPAREN;
+            return true;
+        case ')':
+            key_code = KeyCode::RPAREN;
+            return true;
+        case '_':
+            key_code = KeyCode::UNDERSCORE;
+            return true;
+        case '+':
+            key_code = KeyCode::PLUS;
+            return true;
+        case '-':
+            key_code = KeyCode::MINUS;
+            return true;
+        case '=':
+            key_code = KeyCode::EQUAL;
+            return true;
+        case '{':
+            key_code = KeyCode::LBRACE;
+            return true;
+        case '}':
+            key_code = KeyCode::RBRACE;
+            return true;
+        case '[':
+            key_code = KeyCode::LBRACKET;
+            return true;
+        case ']':
+            key_code = KeyCode::RBRACKET;
+            return true;
+        case '|':
+            key_code = KeyCode::PIPE;
+            return true;
+        case '\\':
+            key_code = KeyCode::BACKSLASH;
+            return true;
+        case ':':
+            key_code = KeyCode::COLON;
+            return true;
+        case '"':
+            key_code = KeyCode::DQUOTE;
+            return true;
+        case ';':
+            key_code = KeyCode::SEMICOLON;
+            return true;
+        case '\'':
+            key_code = KeyCode::SQUOTE;
+            return true;
+        case '<':
+            key_code = KeyCode::LESS;
+            return true;
+        case '>':
+            key_code = KeyCode::GREATER;
+            return true;
+        case '?':
+            key_code = KeyCode::HOOK;
+            return true;
+        case ',':
+            key_code = KeyCode::COMMA;
+            return true;
+        case '.':
+            key_code = KeyCode::PERIOD;
+            return true;
+        case '/':
+            key_code = KeyCode::SLASH;
+            return true;
+        case '`':
+            key_code = KeyCode::BQUOTE;
+            return true;
+        case '~':
+            key_code = KeyCode::TILDE;
+            return true;
+
+        default:
+            if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')) {
+                key_code = static_cast<KeyCode>(c - 'a' + static_cast<int>(KeyCode::K_A));
+                return true;
+            }
+            if ('0' <= c && c <= '9') {
+                key_code = static_cast<KeyCode>(c - '0' + static_cast<int>(KeyCode::K_0));
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+}    // namespace nite::internal
 #endif
