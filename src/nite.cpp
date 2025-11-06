@@ -1,10 +1,7 @@
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <chrono>
-#include <clocale>
 #include <cmath>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -14,9 +11,11 @@
 #include <optional>
 #include <queue>
 #include <stack>
+#include <string>
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <wchar.h>
 
 #include "nite.hpp"
 
@@ -32,37 +31,54 @@
 #    include <cerrno>
 #    include <csignal>
 #    include <cstring>
+#    include <charconv>
+#    include <clocale>
+#    include <concepts>
 #endif
 
-#define ESC  "\033"
-#define CSI  ESC "["
+#define ESC "\033"
+#define CSI ESC "["
 
-#define null (nullptr)
 #define $(expr)                                                                                                                                      \
     if (const auto result = (expr); !result)                                                                                                         \
     return result
 
-static inline constexpr bool is_print(char c) {
-    return 32 <= c && c <= 126;
-}
+#ifdef OS_WINDOWS
+#    include <wchar.h>
 
 static std::string wc_to_string(const wchar_t c) {
     // Create conversion state
-    mbstate_t state;
-    // Zero init state
-    memset(&state, 0, sizeof(mbstate_t));
-    // Get the length
-    size_t len = wcrtomb(null, c, &state);
-    // Create the buffer
-    char *buf = new char[len];
+    std::mbstate_t state;
+    memset(&state, 0, sizeof(state));
+    // Create buffer
+    char buf[16];
     // Convert
-    len = wcrtomb(buf, c, &state);
-    // Create the string
-    std::string str(buf, len);
-    // Delete the buffer
-    delete[] buf;
-    // Return the string
-    return str;
+    size_t len;
+    wcrtomb_s(&len, buf, sizeof(buf), c, &state);
+    if (len == static_cast<size_t>(-1))
+        return "";
+    return std::string(buf, len);
+}
+
+#else
+
+static std::string wc_to_string(const wchar_t c) {
+    // Create conversion state
+    std::mbstate_t state;
+    memset(&state, 0, sizeof(state));
+    // Create the buffer
+    char buf[16];
+    // Convert
+    size_t len = wcrtomb(buf, c, &state);
+    if (len == static_cast<size_t>(-1))
+        return "";
+    return std::string(buf, len);
+}
+
+#endif
+
+static inline constexpr bool is_print(char c) {
+    return 32 <= c && c <= 126;
 }
 
 namespace nite
@@ -685,9 +701,11 @@ namespace nite
         if (mouse_pos == home_cell_btn && (IsMouseClicked(state, MouseButton::LEFT) || IsMouseDoubleClicked(state, MouseButton::LEFT)))
             pivot = {};
 
-        state.impl->selected_stack.push(std::make_unique<internal::ScrollBox>(
-                info.show_scroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
-        ));
+        state.impl->selected_stack.push(
+                std::make_unique<internal::ScrollBox>(
+                        info.show_scroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
+                )
+        );
     }
 
     void BeginGridPane(State &state, GridPaneInfo info) {
@@ -1012,12 +1030,12 @@ namespace nite::internal::console
         DWORD size = FormatMessage(
                 FORMAT_MESSAGE_FROM_SYSTEM                  // Searches the system message table
                         | FORMAT_MESSAGE_IGNORE_INSERTS,    // Ignores insert sequences in the message definition.
-                null,                                       // Handle to the module containing the message table
+                NULL,                                       // Handle to the module containing the message table
                 GetLastError(),                             // Error code to format
                 0,                                          // Default language
                 err_msg_buf,                                // Output buffer for the formatted message
                 4096,                                       // Minimum size of the output buffer
-                null                                        // No arguments for insert sequences
+                NULL                                        // No arguments for insert sequences
         );
 
         if (size == 0)
@@ -1074,7 +1092,7 @@ namespace nite::internal::console
 
     Result print(const std::string &text) {
         static const HANDLE h_con = GetStdHandle(STD_OUTPUT_HANDLE);
-        if (!WriteConsole(h_con, text.c_str(), text.size(), null, null))
+        if (!WriteConsole(h_con, text.c_str(), text.size(), NULL, NULL))
             return std::format("error printing to console: {}", get_last_error());
         return true;
     }
@@ -1867,7 +1885,7 @@ namespace nite::internal
         tv.tv_sec = 0;
         tv.tv_usec = 2 * 1000;
 
-        int ret = select(STDIN_FILENO + 1, &rfds, null, NULL, &tv);
+        int ret = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
         if (ret == -1)
             return false;    // Call failed
         if (ret == 0)
@@ -2425,7 +2443,7 @@ namespace nite::internal
     bool PollRawEvent(Event &event) {
         static std::vector<Event> pending_events = []() {
             // See: man 2 sigaction
-            static struct sigaction sa {};
+            static struct sigaction sa{};
             sa.sa_flags = 0;
             sigemptyset(&sa.sa_mask);
             sa.sa_handler = [](int) { pending_events.push_back(ResizeEvent{GetWindowSize()}); };

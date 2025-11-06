@@ -42,7 +42,7 @@ void hello_test(State &state) {
     static Position scroll_pivot;
     Event event;
     while (PollEvent(state, event)) {
-        std::visit(overloaded{
+        std::visit(overloaded {
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
                     if (std::isprint(ev.key_char))
@@ -118,13 +118,13 @@ void hello_test(State &state) {
         Text(state, {
             .text = std::format("FPS: {:.2f}", 1 / GetDeltaTime(state)),
             .pos = {.x = 0,            .y = 0             },
-            .style{.fg = COLOR_WHITE, .mode = STYLE_NO_BG},
+            .style = {.fg = COLOR_WHITE, .mode = STYLE_NO_BG},
         });
         TextBox(state, {
            .text = std::format("{}", text),
            .pos = {.x = 0, .y = 1},
            .size = {GetPaneSize(state).width, 2},
-           .style{.bg = Color::from_hex(0x165d2a), .fg = COLOR_WHITE},
+           .style = {.bg = Color::from_hex(0x165d2a), .fg = COLOR_WHITE},
            .on_hover = [](TextBoxInfo &info) { info.style.bg = Color::from_hex(0x067bd8); },
            .on_click = [&](TextBoxInfo &) { text = "clicked"; },
         });
@@ -142,7 +142,7 @@ void grid_test(State&state){
 
     Event event;
     while (PollEvent(state, event)) {
-        std::visit(overloaded{
+        std::visit(overloaded {
             [&](const KeyEvent &ev) {
                 if (ev.key_down)
                     if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
@@ -290,7 +290,7 @@ int main() {
     while (!ShouldWindowClose(state)) {
         Event event;
         while (PollEvent(state, event)) {
-            std::visit(overloaded{
+            std::visit(overloaded {
                 [&](const KeyEvent &ev) {
                     if (ev.key_down)
                         if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
