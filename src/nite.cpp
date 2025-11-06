@@ -11,6 +11,7 @@
 #include <ctime>
 #include <cwchar>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <stack>
 #include <unordered_map>
@@ -25,10 +26,6 @@
 #    define OS_LINUX
 #else
 #    error "Unsupported platform"
-#endif
-
-#ifdef OS_WINDOWS
-#    include <optional>
 #endif
 
 #ifdef OS_LINUX
@@ -1777,7 +1774,7 @@ namespace nite::internal::console
     static std::string old_locale;
 
     Result init() {
-        // Refer to: https://www.man7.org/linux/man-pages/man3/termios.3.html
+        // Refer to: man 3 termios
         if (tcgetattr(STDIN_FILENO, &old_term) == -1)
             return std::format("error getting terminal attributes: {}", get_last_error());
         new_term = old_term;
@@ -1804,19 +1801,6 @@ namespace nite::internal::console
         // Refer to: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
         // Refer to: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Alt-and-Meta-Keys
         // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol
-
-        // Keyboard specific
-        // $(print(CSI ">0;4m"));    // modifyKeyboard=4
-        // $(print(CSI ">1;4m"));    // modifyCursorKeys=4
-        // $(print(CSI ">2;4m"));    // modifyFunctionKeys=4
-        // $(print(CSI ">6;4m"));    // modifyModifierKeys=4
-        // $(print(CSI ">7;4m"));    // modifySpecialKeys=4
-
-        // $(print(CSI ">0;1f"));    // formatKeyboard=1
-        // $(print(CSI ">1;1f"));    // formatCursorKeys=1
-        // $(print(CSI ">2;1f"));    // formatFunctionKeys=1
-        // $(print(CSI ">6;1f"));    // formatModifierKeys=1
-        // $(print(CSI ">7;1f"));    // formatSpecialKeys=1
 
         // Enable kitty keyboard protocol
         // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
@@ -1899,43 +1883,15 @@ namespace nite::internal
         return true;
     }
 
-    // Escape sequence grammar
-    // ----------------------------------------------
-    // <text> := <sequence>*
-    // <sequence> :=
-    //      <key_sequence>
-    //    | <mouse_sequence>
-    //    | <focus_sequence>
-    //    ;
-    //
+    // -------------------------------------------------------------------
     // <mouse_sequence> := CSI '<' NUMBER ';' NUMBER ';' NUMBER 'M';
     // <focus_sequence> := CSI ('O' | 'I');
-    //
-    // <key_sequence> :=
-    //    |
-    //    ;
     //
     // ESC      := \033
     // CSI      := \033\[
     // DIGIT    := [0-9]+
     // NUMBER   := DIGIT+
-    // ----------------------------------------------
-
-    // Key        Escape Sequence
-    // ---------+-----------------------
-    // F1       | SS3 P or CSI 1 1 ~
-    // F2       | SS3 Q or CSI 1 2 ~
-    // F3       | SS3 R or CSI 1 3 ~
-    // F4       | SS3 S or CSI 1 4 ~
-    // F5       | CSI 1 5 ~
-    // F6       | CSI 1 7 ~
-    // F7       | CSI 1 8 ~
-    // F8       | CSI 1 9 ~
-    // F9       | CSI 2 0 ~
-    // F10      | CSI 2 1 ~
-    // F11      | CSI 2 3 ~
-    // F12      | CSI 2 4 ~
-    // ---------+-----------------------
+    // -------------------------------------------------------------------
 
 #    define PARSER_TERMINATOR '\n'
 
@@ -1943,7 +1899,12 @@ namespace nite::internal
         size_t index = 0;
         std::string text;
 
+        // Previous mouse click time point
+        inline static auto prev_mcl_tp = std::chrono::high_resolution_clock::time_point();
+
         Result parse_mouse(Event &event) {
+            const auto mev_tp = std::chrono::high_resolution_clock::now();
+
             $(expect_csi());
             $(expect('<'));
 
@@ -2013,10 +1974,19 @@ namespace nite::internal
                 return false;
             }
 
-            // avoid mouse down events
-            if (kind == MouseEventKind::CLICK && current() == 'M') {
-                kind = MouseEventKind::MOVED;
-                button = MouseButton::NONE;
+            if (kind == MouseEventKind::CLICK) {
+                // avoid mouse down events
+                if (current() == 'M') {
+                    kind = MouseEventKind::MOVED;
+                    button = MouseButton::NONE;
+                } else {
+                    // Double click time difference is 500ms
+                    if (mev_tp - prev_mcl_tp <= std::chrono::milliseconds(500)) {
+                        kind = MouseEventKind::DOUBLE_CLICK;
+                        prev_mcl_tp = std::chrono::high_resolution_clock::time_point();
+                    } else
+                        prev_mcl_tp = mev_tp;
+                }
             }
 
             if ((control_byte >> 2) & 0b001)
@@ -2476,9 +2446,9 @@ namespace nite::internal
 
         std::vector<Event> events = Parser(text).parse_events();
         if (events.empty()) {
-            // return false;
-            event = DebugEvent{.text = std::format("Could not parse: {}", text)};
-            return true;
+            return false;
+            // event = DebugEvent{.text = std::format("Could not parse: {}", text)};
+            // return true;
         }
         event = events.front();
         if (const KeyEvent *kev = std::get_if<KeyEvent>(&event)) {
