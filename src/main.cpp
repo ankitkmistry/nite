@@ -28,6 +28,8 @@ std::string btn_str(MouseButton btn) {
         return "NONE";
     case MouseButton::LEFT:
         return "LEFT";
+    case MouseButton::MIDDLE:
+        return "MIDDLE";
     case MouseButton::RIGHT:
         return "RIGHT";
     }

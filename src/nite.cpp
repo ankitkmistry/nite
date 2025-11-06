@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <array>
-#include <bits/types/struct_timeval.h>
+#include <charconv>
 #include <chrono>
 #include <clocale>
 #include <cmath>
@@ -13,8 +13,6 @@
 #include <memory>
 #include <queue>
 #include <stack>
-#include <sys/select.h>
-#include <sys/types.h>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -35,6 +33,7 @@
 
 #ifdef OS_LINUX
 #    include <cerrno>
+#    include <csignal>
 #    include <cstring>
 #endif
 
@@ -308,8 +307,8 @@ namespace nite
         // Events mechanism
         std::unordered_map<KeyCode, KeyState> key_states;
 
-        std::array<BtnState, 3> btn_states;
-        static_assert(3 == static_cast<int>(MouseButton::RIGHT) + 1, "Size of the array must match");
+        std::array<BtnState, 4> btn_states;
+        static_assert(4 == static_cast<int>(MouseButton::RIGHT) + 1, "Size of the array must match");
 
         Position mouse_pos;
         intmax_t mouse_scroll_v = 0;
@@ -415,8 +414,8 @@ namespace nite
     void EndDrawing(State &state) {
         state.impl->mouse_scroll_v = 0;
         state.impl->mouse_scroll_h = 0;
-        for (BtnState &state: state.impl->btn_states)
-            state = {};
+        for (BtnState &btn_state: state.impl->btn_states)
+            btn_state = {};
 
         state.impl->selected_stack.pop();
 
@@ -424,9 +423,9 @@ namespace nite
         case 0:
             break;
         case 1: {
-            auto start = std::chrono::high_resolution_clock::now();
+            const auto start = std::chrono::high_resolution_clock::now();
 
-            auto &cur_buf = state.impl->swapchain.front();
+            const auto &cur_buf = state.impl->swapchain.front();
             const auto cur_size = cur_buf.size();
 
             for (size_t row = 0; row < cur_size.height; row++) {
@@ -436,18 +435,18 @@ namespace nite
                 }
             }
 
-            auto end = std::chrono::high_resolution_clock::now();
+            const auto end = std::chrono::high_resolution_clock::now();
             state.impl->delta_time = end - start;
             break;
         }
         default: {
-            auto start = std::chrono::high_resolution_clock::now();
+            const auto start = std::chrono::high_resolution_clock::now();
 
-            auto prev_buf = std::move(state.impl->swapchain.front());
+            const auto prev_buf = std::move(state.impl->swapchain.front());
             const auto prev_size = prev_buf.size();
             state.impl->swapchain.pop();
 
-            auto &cur_buf = state.impl->swapchain.front();
+            const auto &cur_buf = state.impl->swapchain.front();
             const auto cur_size = cur_buf.size();
 
             if (cur_size == prev_size) {
@@ -469,7 +468,7 @@ namespace nite
                 }
             }
 
-            auto end = std::chrono::high_resolution_clock::now();
+            const auto end = std::chrono::high_resolution_clock::now();
             state.impl->delta_time = end - start;
             break;
         }
@@ -602,12 +601,11 @@ namespace nite
         else if (row_start == row_end)
             for (size_t col = col_start; col < col_end; col++)
                 state.impl->set_cell(col, row_start, fill, style);
-        else {
+        else
             for (size_t col = col_start; col < col_end; col++) {
                 const double row = std::lerp(row_start, row_end, (col - col_start) / std::abs(1. * col_end - col_start));
                 state.impl->set_cell(col, row, fill, style);
             }
-        }
     }
 
     void BeginPane(State &state, const Position top_left, const Size size) {
@@ -723,8 +721,9 @@ namespace nite
             row_progress += info.row_sizes[row] / 100.0;
         }
 
-        auto box = std::make_unique<internal::GridBox>(state.impl->get_selected().get_pos() + info.pos, info.size, num_cols, num_rows, grid);
-        state.impl->selected_stack.push(std::move(box));
+        state.impl->selected_stack.push(
+                std::make_unique<internal::GridBox>(state.impl->get_selected().get_pos() + info.pos, info.size, num_cols, num_rows, grid)
+        );
     }
 
     void BeginGridCell(State &state, size_t col, size_t row) {
@@ -743,12 +742,12 @@ namespace nite
     }
 
     void EndPane(State &state) {
-        internal::Box &box = state.impl->get_selected();
-        if (const auto vbox = dynamic_cast<internal::ScrollBox *>(&box); vbox && vbox->show_scroll_bar()) {
-            const auto &scroll = vbox->get_scroll_style();
-            const auto max_size = vbox->get_max_size();
-            const auto min_size = vbox->get_min_size();
-            const auto pivot = vbox->get_pivot();
+        const internal::Box &box = state.impl->get_selected();
+        if (const auto scroll_box = dynamic_cast<const internal::ScrollBox *>(&box); scroll_box && scroll_box->show_scroll_bar()) {
+            const auto &scroll = scroll_box->get_scroll_style();
+            const auto max_size = scroll_box->get_max_size();
+            const auto min_size = scroll_box->get_min_size();
+            const auto pivot = scroll_box->get_pivot();
 
             // Vertical scroll
             if (min_size.height != max_size.height) {
@@ -791,7 +790,7 @@ namespace nite
         state.impl->selected_stack.pop();
     }
 
-    void DrawBorder(State &state, Border border) {
+    void DrawBorder(State &state, const Border &border) {
         const internal::Box &selected = state.impl->get_selected();
 
         if (border.top_left.value != '\0')
@@ -1740,6 +1739,9 @@ namespace nite::internal
 #    include <unistd.h>
 #    include <termios.h>
 #    include <sys/ioctl.h>
+#    include <bits/types/struct_timeval.h>
+#    include <sys/select.h>
+#    include <sys/types.h>
 
 namespace nite::internal::console
 {
@@ -1797,33 +1799,29 @@ namespace nite::internal::console
 
         $(print(CSI "?1049h"));    // Enter alternate buffer
         $(print(CSI "?25l"));      // Hide console cursor
-        clear();
+        $(clear());
 
         // Refer to: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
         // Refer to: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Alt-and-Meta-Keys
-        // -----------+----------------+-----------------+------------
-        // key        | altSendsEscape | metaSendsEscape | result
-        // -----------+----------------+-----------------+------------
-        // x          | ON             | off             | x
-        // Meta+x     | ON             | off             | shift
-        // Alt+x      | ON             | off             | ESC  x
-        // Alt+Meta+x | ON             | off             | ESC  shift
-        // -----------+----------------+-----------------+------------
+        // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol
 
         // Keyboard specific
         $(print(CSI ">0;4m"));    // modifyKeyboard=4
         $(print(CSI ">1;4m"));    // modifyCursorKeys=4
         $(print(CSI ">2;4m"));    // modifyFunctionKeys=4
-        $(print(CSI ">4;3m"));    // modifyOtherKeys=3
         $(print(CSI ">6;4m"));    // modifyModifierKeys=4
         $(print(CSI ">7;4m"));    // modifySpecialKeys=4
 
         $(print(CSI ">0;1f"));    // formatKeyboard=1
         $(print(CSI ">1;1f"));    // formatCursorKeys=1
         $(print(CSI ">2;1f"));    // formatFunctionKeys=1
-        $(print(CSI ">4;1f"));    // formatOtherKeys=1
         $(print(CSI ">6;1f"));    // formatModifierKeys=1
         $(print(CSI ">7;1f"));    // formatSpecialKeys=1
+
+        // Enable kitty keyboard protocol
+        // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
+        // flags = 1 | 2 | 4 | 8 = 15
+        $(print(CSI ">15u"));
 
         $(print(CSI "?1039h"));    // Send ESC when Alt modifies a key
 
@@ -1848,8 +1846,13 @@ namespace nite::internal::console
         $(print(CSI "?1003l"));    // Do not use All Motion Mouse Tracking
         $(print(CSI "?1002l"));    // Do not use Cell Motion Mouse Tracking (move and drag tracking)
         $(print(CSI "?1000l"));    // Do not send Mouse X & Y on button press and release
+        // Keyboard specific
+        $(print(CSI "?1039h"));    // Do not Send ESC when Alt modifies a key
 
-        clear();
+        // Disable kitty keyboard protocol
+        $(print(CSI "<u"));
+
+        $(clear());
         $(print(CSI "?25h"));      // Show console cursor
         $(print(CSI "?1049l"));    // Exit alternate buffer
 
@@ -1898,30 +1901,24 @@ namespace nite::internal
 
     // Escape sequence grammar
     // ----------------------------------------------
-    // text := <sequence>*
-    // sequence :=
+    // <text> := <sequence>*
+    // <sequence> :=
     //      <key_sequence>
     //    | <mouse_sequence>
     //    | <focus_sequence>
     //    ;
     //
-    // mouse_sequence := CSI '<' NUMBER ';' NUMBER ';' NUMBER 'M';
-    // focus_sequence := CSI ('O' | 'I');
+    // <mouse_sequence> := CSI '<' NUMBER ';' NUMBER ';' NUMBER 'M';
+    // <focus_sequence> := CSI ('O' | 'I');
     //
-    // key_sequence :=
-    //      <CHAR>
-    //    | <ESC> O (P|Q|R|S)                 // Fn keys F1-F4
-    //    | <CSI> 1 (1|2|3|4|5|7|8|9) <modifiers>? ~       // Fn keys F1-F8
-    //    | <CSI> 2 (0|1|2|3|4) <modifiers>? ~             // Fn keys F8-F12
-    //    | <CSI> 1 ; (A|B|C|D)               // Arrow keys
-    //    | <CSI> (A|B|C|D)                   // Arrow keys
-    //    | <CSI> (H|F)                   // Home/end keys
+    // <key_sequence> :=
+    //    |
     //    ;
     //
     // ESC      := \033
     // CSI      := \033\[
     // DIGIT    := [0-9]+
-    // NUMBER   := DIGIT DIGIT
+    // NUMBER   := DIGIT+
     // ----------------------------------------------
 
     // Key        Escape Sequence
@@ -1940,44 +1937,111 @@ namespace nite::internal
     // F12      | CSI 2 4 ~
     // ---------+-----------------------
 
+#    define PARSER_TERMINATOR '\n'
+
     class Parser {
-        size_t i = 0;
+        size_t index = 0;
         std::string text;
 
-        bool parse_mouse(Event &event) {
-            if (!match_csi())
-                return false;
-            if (!match('<'))
-                return false;
+        Result parse_mouse(Event &event) {
+            $(expect_csi());
+            $(expect('<'));
 
-            size_t modifier = 0;
+            uint8_t control_byte = 0;
             size_t x_coord = 0;
             size_t y_coord = 0;
 
-            if (!match_number(modifier))
-                return false;
-            if (!match(';'))
-                return false;
+            if (!match_number(control_byte))
+                return "expected number";
+            $(expect(';'));
             if (!match_number(x_coord))
-                return false;
-            if (!match(';'))
-                return false;
+                return "expected number";
+            $(expect(';'));
             if (!match_number(y_coord))
-                return false;
+                return "expected number";
             if (!match_any('M', 'm'))
-                return false;
+                return "expected 'm' or 'M'";
 
-            // TODO: operate on modifiers
+            // Bit layout of `control_byte`
+            // 0x * * * * * * * *
+            //    7 6 5 4 3 2 1 0
+            // 0 - button number
+            // 1 - button number
+            // 2 - shift
+            // 3 - meta or alt
+            // 4 - control
+            // 5 - mouse dragging (ignored)
+            // 6 - button number
+            // 7 - button number
+            MouseEventKind kind;
+            MouseButton button = MouseButton::NONE;
+            uint8_t modifiers = 0;
+            {
+                // should be release 'm'
+                const uint8_t button_number = (control_byte & 0b0000'0011) | ((control_byte & 0b1100'0000) >> 4);
+                const bool dragging = (control_byte & 0b0010'0000) == 0b0010'0000;
+
+                switch (button_number) {
+                case 0:
+                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
+                    button = dragging ? MouseButton::NONE : MouseButton::LEFT;
+                    break;
+                case 1:
+                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
+                    button = dragging ? MouseButton::NONE : MouseButton::MIDDLE;
+                    break;
+                case 2:
+                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
+                    button = dragging ? MouseButton::NONE : MouseButton::RIGHT;
+                    break;
+                case 3:
+                    kind = MouseEventKind::MOVED;
+                    break;
+                case 4:
+                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::SCROLL_UP;
+                    break;
+                case 5:
+                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::SCROLL_DOWN;
+                    break;
+                case 6:
+                    if (dragging)
+                        return false;
+                    kind = MouseEventKind::SCROLL_LEFT;
+                    break;
+                case 7:
+                    if (dragging)
+                        return false;
+                    kind = MouseEventKind::SCROLL_RIGHT;
+                    break;
+                default:
+                    return false;
+                }
+
+                // avoid mouse down events
+                if (kind == MouseEventKind::CLICK && current() == 'M') {
+                    kind = MouseEventKind::MOVED;
+                    button = MouseButton::NONE;
+                }
+
+                if ((control_byte >> 2) & 0b001)
+                    modifiers |= KEY_SHIFT;
+                if ((control_byte >> 2) & 0b010)
+                    modifiers |= KEY_ALT;
+                if ((control_byte >> 2) & 0b100)
+                    modifiers |= KEY_CTRL;
+            }
+
             event = MouseEvent{
-                    .kind = MouseEventKind::MOVED,
+                    .kind = kind,
+                    .button = button,
                     .pos = {.col = x_coord - 1, .row = y_coord - 1},
+                    .modifiers = modifiers,
             };
             return true;
         }
 
-        bool parse_focus(Event &event) {
-            if (!match_csi())
-                return false;
+        Result parse_focus(Event &event) {
+            $(expect_csi());
 
             if (match('O')) {
                 event = FocusEvent{.focus_gained = false};
@@ -1986,49 +2050,49 @@ namespace nite::internal
                 event = FocusEvent{.focus_gained = true};
                 return true;
             } else
-                return false;
+                return "expected 'O' or 'I'";
         }
 
         bool parse(Event &event) {
-            const size_t old_index = i;
+            const size_t old_index = index;
             if (parse_mouse(event))
                 return true;
 
-            i = old_index;
+            index = old_index;
             if (parse_focus(event))
                 return true;
             return false;
         }
 
-        bool is_at_end() const {
-            return i >= text.size();
-        }
-
-        bool match_csi() {
-            if (!match('\x1b'))
-                return false;
-            if (!match('['))
-                return false;
-            return true;
+        Result expect_csi() {
+            if (peek() == '\x1b' && peek(1) == '[') {
+                advance();
+                advance();
+                return true;
+            } else
+                return "expected CSI sequence";
         }
 
         bool match_digit() {
-            if (const char c = peek(); '0' < c && c < '9') {
+            if (const char c = peek(); '0' <= c && c <= '9') {
                 advance();
                 return true;
             }
             return false;
         }
 
-        bool match_number(size_t &number) {
+        template<std::integral Integer>
+        bool match_number(Integer &number) {
             std::string str;
             while (str.size() <= 4 && match_digit())
                 str += current();
-
             if (str.empty())
                 return false;
-            number = std::stoi(str);
-            return true;
+
+            const auto result = std::from_chars<Integer>(str.data(), str.data() + str.size(), number, 10);
+            if (result.ec == std::errc())
+                return true;
+            return false;
         }
 
         template<typename... Char>
@@ -2050,52 +2114,64 @@ namespace nite::internal
             return false;
         }
 
-        char current() const {
-            if (i == 0 || i - 1 >= text.size())
-                return '\0';
-            return text[i - 1];
+        Result expect(char c) {
+            if (peek() == c) {
+                advance();
+                return true;
+            }
+            return std::format("expected '{}' found '{}'", c, peek());
         }
 
-        char peek() const {
-            if (i >= text.size())
-                return '\0';
-            return text[i];
+        char current() const {
+            if (index == 0 || index - 1 >= text.size())
+                return PARSER_TERMINATOR;
+            return text[index - 1];
+        }
+
+        char peek(const size_t i = 0) const {
+            if (index + i >= text.size())
+                return PARSER_TERMINATOR;
+            return text[index + i];
         }
 
         char advance() {
-            if (i >= text.size())
-                return '\0';
-            return text[i++];
+            if (index >= text.size())
+                return PARSER_TERMINATOR;
+            return text[index++];
         }
 
       public:
-        explicit Parser(const std::string &text) : text(text) {}
+        explicit Parser(const std::string &text) : text(text + PARSER_TERMINATOR) {}
 
         ~Parser() = default;
 
-        void parse_events(std::vector<Event> &events) {
+        std::vector<Event> parse_events() {
+            std::vector<Event> events;
             std::vector<size_t> esc_start_list;
             for (size_t i = 0; i < text.size(); i++)
                 if (text[i] == '\x1b')
                     esc_start_list.push_back(i);
 
             for (const size_t esc_start: esc_start_list) {
-                i = esc_start;
+                index = esc_start;
                 if (Event event; parse(event))
                     events.push_back(event);
             }
-            // while (!is_at_end()) {
-            //     if (Event event; parse(event))
-            //         events.push_back(event);
-            //     else    // Go to the next escape sequence
-            //         while (peek() != '\x1b' && peek() != '\0')
-            //             advance();
-            // }
+            return events;
         }
     };
 
     bool PollRawEvent(Event &event) {
-        static std::vector<Event> pending_events;
+        static std::vector<Event> pending_events = []() {
+            // See: man 2 sigaction
+            static struct sigaction sa {};
+            sa.sa_flags = 0;
+            sigemptyset(&sa.sa_mask);
+            sa.sa_handler = [](int) { pending_events.push_back(ResizeEvent{GetWindowSize()}); };
+            sigaction(SIGWINCH, &sa, NULL);
+
+            return std::vector<Event>();
+        }();
 
         if (!pending_events.empty()) {
             event = pending_events.back();
@@ -2107,10 +2183,7 @@ namespace nite::internal
         if (!con_read(text))
             return false;
 
-        Parser parser(text);
-        std::vector<Event> events;
-        parser.parse_events(events);
-
+        std::vector<Event> events = Parser(text).parse_events();
         if (events.empty()) {
             // return false;
             event = DebugEvent{.text = std::format("Could not parse: {}", text)};

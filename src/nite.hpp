@@ -596,7 +596,7 @@ namespace nite
 
     void EndPane(State &state);
 
-    void DrawBorder(State &state, Border border);
+    void DrawBorder(State &state, const Border &border);
 
     // enum class Align {
     //     TOP_LEFT,
@@ -1024,6 +1024,7 @@ namespace nite
     enum class MouseButton {
         NONE,
         LEFT,
+        MIDDLE, // TODO: add middle button support for windows
         RIGHT,
     };
 
