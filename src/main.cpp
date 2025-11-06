@@ -411,13 +411,13 @@ ImageView load_image(const char *filename) {
     int width, height, channels;
     unsigned char *img = stbi_load(filename, &width, &height, &channels, STBI_grey);
     if (img == NULL) {
-        std::cerr << "could not open file: " << filename << std::endl;
+        // std::cerr << "could not open file: " << filename << std::endl;
         std::exit(1);
     }
-    std::cout << "opened file: " << filename << std::endl;
-    std::cout << "width: " << width << std::endl;
-    std::cout << "height: " << height << std::endl;
-    std::cout << "channels: " << channels << std::endl;
+    // std::cout << "opened file: " << filename << std::endl;
+    // std::cout << "width: " << width << std::endl;
+    // std::cout << "height: " << height << std::endl;
+    // std::cout << "channels: " << channels << std::endl;
 
     auto result = ImageView(img, width, height);
     stbi_image_free(img);
@@ -476,8 +476,9 @@ int main() {
 
     Position scroll_pivot;
 
-    ImageView image = load_image("../res/musashi.jpg");
-    // image = down_scale(image, 6, 12);
+    ImageView image = load_image("../res/horn of salvation.jpg");
+    // ImageView image = load_image("../res/musashi.png");
+    image = down_scale(image, 1, 3);
 
     while (!ShouldWindowClose(state)) {
         Event event;
