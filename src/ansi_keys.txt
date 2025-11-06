@@ -1,0 +1,81 @@
+Borrowed from https://sw.kovidgoyal.net/kitty/keyboard-protocol/#functional-key-definitions
+
+UP                   | 1 A
+DOWN                 | 1 B
+RIGHT                | 1 C
+LEFT                 | 1 D
+END                  | 1 F
+HOME                 | 1 H
+F1                   | 1 P
+F2                   | 1 Q
+F4                   | 1 S
+
+INSERT               | 2 ~
+DELETE               | 3 ~
+PAGE_UP              | 5 ~
+PAGE_DOWN            | 6 ~
+HOME                 | 7 ~
+END                  | 8 ~
+F1                   | 11 ~
+F2                   | 12 ~
+F3                   | 13 ~
+F4                   | 14 ~
+F5                   | 15 ~
+F6                   | 17 ~
+F7                   | 18 ~
+F8                   | 19 ~
+F9                   | 20 ~
+F10                  | 21 ~
+F11                  | 23 ~
+F12                  | 24 ~
+
+TAB                  | 9 u
+ENTER                | 13 u
+ESCAPE               | 27 u
+BACKSPACE            | 127 u
+
+F13                  | 57376 u
+F14                  | 57377 u
+F15                  | 57378 u
+F16                  | 57379 u
+F17                  | 57380 u
+F18                  | 57381 u
+F19                  | 57382 u
+F20                  | 57383 u
+F21                  | 57384 u
+F22                  | 57385 u
+F23                  | 57386 u
+F24                  | 57387 u
+
+KP_LEFT              | 57417 u
+KP_RIGHT             | 57418 u
+KP_UP                | 57419 u
+KP_DOWN              | 57420 u
+KP_PAGE_UP           | 57421 u
+KP_PAGE_DOWN         | 57422 u
+KP_HOME              | 57423 u
+KP_END               | 57424 u
+KP_INSERT            | 57425 u
+KP_DELETE            | 57426 u
+
+// These are printable, so these are ignored from the num keypad
+KP_0                 | 57399 u
+KP_1                 | 57400 u
+KP_2                 | 57401 u
+KP_3                 | 57402 u
+KP_4                 | 57403 u
+KP_5                 | 57404 u
+KP_6                 | 57405 u
+KP_7                 | 57406 u
+KP_8                 | 57407 u
+KP_9                 | 57408 u
+KP_DECIMAL           | 57409 u
+KP_DIVIDE            | 57410 u
+KP_MULTIPLY          | 57411 u
+KP_SUBTRACT          | 57412 u
+KP_ADD               | 57413 u
+KP_ENTER             | 57414 u
+KP_EQUAL             | 57415 u
+KP_SEPARATOR         | 57416 u
+
+

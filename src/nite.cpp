@@ -1806,22 +1806,22 @@ namespace nite::internal::console
         // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol
 
         // Keyboard specific
-        $(print(CSI ">0;4m"));    // modifyKeyboard=4
-        $(print(CSI ">1;4m"));    // modifyCursorKeys=4
-        $(print(CSI ">2;4m"));    // modifyFunctionKeys=4
-        $(print(CSI ">6;4m"));    // modifyModifierKeys=4
-        $(print(CSI ">7;4m"));    // modifySpecialKeys=4
+        // $(print(CSI ">0;4m"));    // modifyKeyboard=4
+        // $(print(CSI ">1;4m"));    // modifyCursorKeys=4
+        // $(print(CSI ">2;4m"));    // modifyFunctionKeys=4
+        // $(print(CSI ">6;4m"));    // modifyModifierKeys=4
+        // $(print(CSI ">7;4m"));    // modifySpecialKeys=4
 
-        $(print(CSI ">0;1f"));    // formatKeyboard=1
-        $(print(CSI ">1;1f"));    // formatCursorKeys=1
-        $(print(CSI ">2;1f"));    // formatFunctionKeys=1
-        $(print(CSI ">6;1f"));    // formatModifierKeys=1
-        $(print(CSI ">7;1f"));    // formatSpecialKeys=1
+        // $(print(CSI ">0;1f"));    // formatKeyboard=1
+        // $(print(CSI ">1;1f"));    // formatCursorKeys=1
+        // $(print(CSI ">2;1f"));    // formatFunctionKeys=1
+        // $(print(CSI ">6;1f"));    // formatModifierKeys=1
+        // $(print(CSI ">7;1f"));    // formatSpecialKeys=1
 
         // Enable kitty keyboard protocol
         // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
-        // flags = 1 | 2 | 4 | 8 = 15
-        $(print(CSI ">15u"));
+        // flags = 1 | 4 = 5
+        $(print(CSI ">5u"));
 
         $(print(CSI "?1039h"));    // Send ESC when Alt modifies a key
 
@@ -1870,7 +1870,7 @@ namespace nite::internal::console
 #ifdef OS_LINUX
 namespace nite::internal
 {
-    bool get_key_code(char c, KeyCode &key_code);
+    Result get_key_code(char c, KeyCode &key_code);
 
     bool con_read(std::string &str) {
         static char buf[256];
@@ -1951,14 +1951,11 @@ namespace nite::internal
             size_t x_coord = 0;
             size_t y_coord = 0;
 
-            if (!match_number(control_byte))
-                return "expected number";
+            $(expect_number(control_byte));
             $(expect(';'));
-            if (!match_number(x_coord))
-                return "expected number";
+            $(expect_number(x_coord));
             $(expect(';'));
-            if (!match_number(y_coord))
-                return "expected number";
+            $(expect_number(y_coord));
             if (!match_any('M', 'm'))
                 return "expected 'm' or 'M'";
 
@@ -1976,60 +1973,58 @@ namespace nite::internal
             MouseEventKind kind;
             MouseButton button = MouseButton::NONE;
             uint8_t modifiers = 0;
-            {
-                // should be release 'm'
-                const uint8_t button_number = (control_byte & 0b0000'0011) | ((control_byte & 0b1100'0000) >> 4);
-                const bool dragging = (control_byte & 0b0010'0000) == 0b0010'0000;
 
-                switch (button_number) {
-                case 0:
-                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
-                    button = dragging ? MouseButton::NONE : MouseButton::LEFT;
-                    break;
-                case 1:
-                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
-                    button = dragging ? MouseButton::NONE : MouseButton::MIDDLE;
-                    break;
-                case 2:
-                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
-                    button = dragging ? MouseButton::NONE : MouseButton::RIGHT;
-                    break;
-                case 3:
-                    kind = MouseEventKind::MOVED;
-                    break;
-                case 4:
-                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::SCROLL_UP;
-                    break;
-                case 5:
-                    kind = dragging ? MouseEventKind::MOVED : MouseEventKind::SCROLL_DOWN;
-                    break;
-                case 6:
-                    if (dragging)
-                        return false;
-                    kind = MouseEventKind::SCROLL_LEFT;
-                    break;
-                case 7:
-                    if (dragging)
-                        return false;
-                    kind = MouseEventKind::SCROLL_RIGHT;
-                    break;
-                default:
+            const uint8_t button_number = (control_byte & 0b0000'0011) | ((control_byte & 0b1100'0000) >> 4);
+            const bool dragging = (control_byte & 0b0010'0000) == 0b0010'0000;
+
+            switch (button_number) {
+            case 0:
+                kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
+                button = dragging ? MouseButton::NONE : MouseButton::LEFT;
+                break;
+            case 1:
+                kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
+                button = dragging ? MouseButton::NONE : MouseButton::MIDDLE;
+                break;
+            case 2:
+                kind = dragging ? MouseEventKind::MOVED : MouseEventKind::CLICK;
+                button = dragging ? MouseButton::NONE : MouseButton::RIGHT;
+                break;
+            case 3:
+                kind = MouseEventKind::MOVED;
+                break;
+            case 4:
+                kind = dragging ? MouseEventKind::MOVED : MouseEventKind::SCROLL_UP;
+                break;
+            case 5:
+                kind = dragging ? MouseEventKind::MOVED : MouseEventKind::SCROLL_DOWN;
+                break;
+            case 6:
+                if (dragging)
                     return false;
-                }
-
-                // avoid mouse down events
-                if (kind == MouseEventKind::CLICK && current() == 'M') {
-                    kind = MouseEventKind::MOVED;
-                    button = MouseButton::NONE;
-                }
-
-                if ((control_byte >> 2) & 0b001)
-                    modifiers |= KEY_SHIFT;
-                if ((control_byte >> 2) & 0b010)
-                    modifiers |= KEY_ALT;
-                if ((control_byte >> 2) & 0b100)
-                    modifiers |= KEY_CTRL;
+                kind = MouseEventKind::SCROLL_LEFT;
+                break;
+            case 7:
+                if (dragging)
+                    return false;
+                kind = MouseEventKind::SCROLL_RIGHT;
+                break;
+            default:
+                return false;
             }
+
+            // avoid mouse down events
+            if (kind == MouseEventKind::CLICK && current() == 'M') {
+                kind = MouseEventKind::MOVED;
+                button = MouseButton::NONE;
+            }
+
+            if ((control_byte >> 2) & 0b001)
+                modifiers |= KEY_SHIFT;
+            if ((control_byte >> 2) & 0b010)
+                modifiers |= KEY_ALT;
+            if ((control_byte >> 2) & 0b100)
+                modifiers |= KEY_CTRL;
 
             event = MouseEvent{
                     .kind = kind,
@@ -2040,7 +2035,66 @@ namespace nite::internal
             return true;
         }
 
-        Result parse_focus(Event &event) {
+        // CSI NUMBER (':' NUMBER? (':' NUMBER?)?)? (';' NUMBER?)? [ABCDEFHPQSu~]
+        // 0x0d         -> Enter key
+        // 0x7f | 0x08  -> Backspace
+        // 0x09         -> Tab
+        // any printable char
+        Result parse_key_and_focus(Event &event) {
+            if (peek() != '\x1b') {
+                switch (advance()) {
+                case 0x0d:
+                    event = KeyEvent{
+                            .key_down = true,
+                            .key_code = KeyCode::ENTER,
+                            .key_char = current(),
+                            .modifiers = 0,
+                    };
+                    return true;
+                case 0x7f:
+                case 0x08:
+                    event = KeyEvent{
+                            .key_down = true,
+                            .key_code = KeyCode::BACKSPACE,
+                            .key_char = current(),
+                            .modifiers = 0,
+                    };
+                    return true;
+                case 0x09:
+                    event = KeyEvent{
+                            .key_down = true,
+                            .key_code = KeyCode::TAB,
+                            .key_char = current(),
+                            .modifiers = 0,
+                    };
+                    return true;
+                default: {
+                    KeyCode key_code;
+                    $(get_key_code(current(), key_code));
+                    event = KeyEvent{
+                            .key_down = true,
+                            .key_code = key_code,
+                            .key_char = current(),
+                            .modifiers = 0,
+                    };
+                    return true;
+                }
+                }
+            } else if (peek(1) != '[') {
+                advance();
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = KeyCode::ESCAPE,
+                        .key_char = '\x1b',
+                        .modifiers = 0,
+                };
+                return true;
+            }
+
+            int key_val_unsh = 0;              // unshifted key val
+            std::optional<char> key_val_sh;    // shifted key val
+            std::optional<uint8_t> key_modifiers;
+
             $(expect_csi());
 
             if (match('O')) {
@@ -2049,8 +2103,244 @@ namespace nite::internal
             } else if (match('I')) {
                 event = FocusEvent{.focus_gained = true};
                 return true;
-            } else
-                return "expected 'O' or 'I'";
+            }
+
+            $(expect_number(key_val_unsh));
+
+            if (match(':')) {
+                if (char val; match_number(val))
+                    key_val_sh = val;
+                if (match(':')) {
+                    size_t val;
+                    match_number(val);    // base layout key (ignored)
+                }
+            }
+
+            if (match(';')) {
+                // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#modifiers
+                if (uint8_t val; match_number(val))
+                    key_modifiers = val == 0 ? 0 : val - 1;
+            }
+
+            char functional;
+            if (match_any('A', 'B', 'C', 'D', 'E', 'F', 'H', 'P', 'Q', 'S', 'u', '~'))
+                functional = current();
+            else
+                return "expected one of 'ABCDEFHPQSu~'";
+
+            KeyCode key_code;
+            char key_char = 0;
+            uint8_t modifiers = 0;
+
+            if (key_val_sh) {
+                key_char = *key_val_sh;
+                $(get_key_code(key_char, key_code));
+            } else {
+                const int key_val = key_val_unsh;
+                if (key_val == 1) {
+                    switch (functional) {
+                    case 'A':
+                        key_code = KeyCode::UP;
+                        break;
+                    case 'B':
+                        key_code = KeyCode::DOWN;
+                        break;
+                    case 'C':
+                        key_code = KeyCode::RIGHT;
+                        break;
+                    case 'D':
+                        key_code = KeyCode::LEFT;
+                        break;
+                    case 'F':
+                        key_code = KeyCode::END;
+                        break;
+                    case 'H':
+                        key_code = KeyCode::HOME;
+                        break;
+                    case 'P':
+                        key_code = KeyCode::F1;
+                        break;
+                    case 'Q':
+                        key_code = KeyCode::F2;
+                        break;
+                    case 'S':
+                        key_code = KeyCode::F4;
+                        break;
+                    default:
+                        return "key not supported";
+                    }
+                } else if (functional == '~') {
+                    switch (key_val) {
+                    case 2:
+                        key_code = KeyCode::INSERT;
+                        break;
+                    case 3:
+                        key_code = KeyCode::DELETE;
+                        break;
+                    case 5:
+                        key_code = KeyCode::PAGE_UP;
+                        break;
+                    case 6:
+                        key_code = KeyCode::PAGE_DOWN;
+                        break;
+                    case 7:
+                        key_code = KeyCode::HOME;
+                        break;
+                    case 8:
+                        key_code = KeyCode::END;
+                        break;
+                    case 11:
+                        key_code = KeyCode::F1;
+                        break;
+                    case 12:
+                        key_code = KeyCode::F2;
+                        break;
+                    case 13:
+                        key_code = KeyCode::F3;
+                        break;
+                    case 14:
+                        key_code = KeyCode::F4;
+                        break;
+                    case 15:
+                        key_code = KeyCode::F5;
+                        break;
+                    case 17:
+                        key_code = KeyCode::F6;
+                        break;
+                    case 18:
+                        key_code = KeyCode::F7;
+                        break;
+                    case 19:
+                        key_code = KeyCode::F8;
+                        break;
+                    case 20:
+                        key_code = KeyCode::F9;
+                        break;
+                    case 21:
+                        key_code = KeyCode::F10;
+                        break;
+                    case 23:
+                        key_code = KeyCode::F11;
+                        break;
+                    case 24:
+                        key_code = KeyCode::F12;
+                        break;
+                    default:
+                        return "key not supported";
+                    }
+                } else if (functional == 'u') {
+                    switch (key_val) {
+                    case 9:
+                        key_code = KeyCode::TAB;
+                        break;
+                    case 13:
+                        key_code = KeyCode::ENTER;
+                        break;
+                    case 27:
+                        key_code = KeyCode::ESCAPE;
+                        break;
+                    case 127:
+                        key_code = KeyCode::BACKSPACE;
+                        break;
+                    case 57376:
+                        key_code = KeyCode::F13;
+                        break;
+                    case 57377:
+                        key_code = KeyCode::F14;
+                        break;
+                    case 57378:
+                        key_code = KeyCode::F15;
+                        break;
+                    case 57379:
+                        key_code = KeyCode::F16;
+                        break;
+                    case 57380:
+                        key_code = KeyCode::F17;
+                        break;
+                    case 57381:
+                        key_code = KeyCode::F18;
+                        break;
+                    case 57382:
+                        key_code = KeyCode::F19;
+                        break;
+                    case 57383:
+                        key_code = KeyCode::F20;
+                        break;
+                    case 57384:
+                        key_code = KeyCode::F21;
+                        break;
+                    case 57385:
+                        key_code = KeyCode::F22;
+                        break;
+                    case 57386:
+                        key_code = KeyCode::F23;
+                        break;
+                    case 57387:
+                        key_code = KeyCode::F24;
+                        break;
+                    case 57417:
+                        key_code = KeyCode::LEFT;
+                        break;
+                    case 57418:
+                        key_code = KeyCode::RIGHT;
+                        break;
+                    case 57419:
+                        key_code = KeyCode::UP;
+                        break;
+                    case 57420:
+                        key_code = KeyCode::DOWN;
+                        break;
+                    case 57421:
+                        key_code = KeyCode::PAGE_UP;
+                        break;
+                    case 57422:
+                        key_code = KeyCode::PAGE_DOWN;
+                        break;
+                    case 57423:
+                        key_code = KeyCode::HOME;
+                        break;
+                    case 57424:
+                        key_code = KeyCode::END;
+                        break;
+                    case 57425:
+                        key_code = KeyCode::INSERT;
+                        break;
+                    case 57426:
+                        key_code = KeyCode::DELETE;
+                        break;
+                    default:
+                        key_char = static_cast<char>(key_val);
+                        $(get_key_code(key_char, key_code));
+                        break;
+                    }
+                } else {
+                    key_char = static_cast<char>(key_val);
+                    $(get_key_code(key_char, key_code));
+                }
+            }
+
+            if (key_modifiers) {
+                const auto val = *key_modifiers;
+                if (val & 0b0000'0001)
+                    modifiers |= KEY_SHIFT;
+                if (val & 0b0000'0010)
+                    modifiers |= KEY_ALT;
+                if (val & 0b0000'0100)
+                    modifiers |= KEY_CTRL;
+                if (val & 0b0000'1000)
+                    modifiers |= KEY_SUPER;
+                if (val & 0b0010'0000)
+                    modifiers |= KEY_META;
+            }
+
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = key_code,
+                    .key_char = key_char,
+                    .modifiers = modifiers,
+            };
+
+            return true;
         }
 
         bool parse(Event &event) {
@@ -2059,7 +2349,7 @@ namespace nite::internal
                 return true;
 
             index = old_index;
-            if (parse_focus(event))
+            if (const auto result = parse_key_and_focus(event))
                 return true;
             return false;
         }
@@ -2093,6 +2383,13 @@ namespace nite::internal
             if (result.ec == std::errc())
                 return true;
             return false;
+        }
+
+        template<std::integral Integer>
+        Result expect_number(Integer &number) {
+            if (match_number(number))
+                return true;
+            return "expected number";
         }
 
         template<typename... Char>
@@ -2141,19 +2438,13 @@ namespace nite::internal
         }
 
       public:
-        explicit Parser(const std::string &text) : text(text + PARSER_TERMINATOR) {}
+        explicit Parser(const std::string &text) : text(text) {}
 
         ~Parser() = default;
 
         std::vector<Event> parse_events() {
             std::vector<Event> events;
-            std::vector<size_t> esc_start_list;
-            for (size_t i = 0; i < text.size(); i++)
-                if (text[i] == '\x1b')
-                    esc_start_list.push_back(i);
-
-            for (const size_t esc_start: esc_start_list) {
-                index = esc_start;
+            while (index < text.size()) {
                 if (Event event; parse(event))
                     events.push_back(event);
             }
@@ -2190,6 +2481,11 @@ namespace nite::internal
             return true;
         }
         event = events.front();
+        if (const KeyEvent *kev = std::get_if<KeyEvent>(&event)) {
+            KeyEvent kev_release = *kev;
+            kev_release.key_down = false;
+            pending_events.push_back(kev_release);
+        }
         events.erase(events.begin());
         for (const Event &event: events)
             pending_events.push_back(event);
@@ -2197,27 +2493,14 @@ namespace nite::internal
         return true;
     }
 
-    bool get_key_code(char c, KeyCode &key_code) {
+    Result get_key_code(char c, KeyCode &key_code) {
         switch (c) {
         case '\033':
             key_code = KeyCode::ESCAPE;
             return true;
-        case '\x0a':
-            key_code = KeyCode::ENTER;
-            return true;
-        case '\x0d':
-            key_code = KeyCode::ENTER;
-            return true;
-        case '\x7f':
-            key_code = KeyCode::BACKSPACE;
-            return true;
-        case '\t':
-            key_code = KeyCode::TAB;
-            return true;
         case ' ':
             key_code = KeyCode::SPACE;
             return true;
-
         case '!':
             key_code = KeyCode::BANG;
             return true;
@@ -2314,19 +2597,19 @@ namespace nite::internal
         case '~':
             key_code = KeyCode::TILDE;
             return true;
-
         default:
-            if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')) {
+            if ('a' <= c && c <= 'z') {
                 key_code = static_cast<KeyCode>(c - 'a' + static_cast<int>(KeyCode::K_A));
                 return true;
-            }
-            if ('0' <= c && c <= '9') {
+            } else if ('A' <= c && c <= 'Z') {
+                key_code = static_cast<KeyCode>(c - 'A' + static_cast<int>(KeyCode::K_A));
+                return true;
+            } else if ('0' <= c && c <= '9') {
                 key_code = static_cast<KeyCode>(c - '0' + static_cast<int>(KeyCode::K_0));
                 return true;
             }
-            return false;
         }
-        return false;
+        return std::format("key not supported: 0x{:x}", c);
     }
 }    // namespace nite::internal
 #endif

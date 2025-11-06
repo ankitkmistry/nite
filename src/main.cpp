@@ -259,7 +259,22 @@ std::string quoted_str(std::string str) {
         if (std::isprint(c)) new_str += c;
         else new_str += std::format("\\x{:x}", c);
     }
-    return new_str.substr(1,new_str.size()-2);
+    return new_str.substr(1, new_str.size() - 2);
+}
+
+std::string mod_str(uint8_t modifiers) {
+    std::string result;
+    if (modifiers & KEY_SHIFT) result += "SHIFT | ";
+    if (modifiers & KEY_CTRL) result += "CTRL | ";
+    if (modifiers & KEY_ALT) result += "ALT | ";
+    if (modifiers & KEY_SUPER) result += "SUPER | ";
+    if (modifiers & KEY_META) result += "META | ";
+    if (!result.empty()) {
+        result.pop_back();
+        result.pop_back();
+        result.pop_back();
+    } else return "NONE";
+    return result;
 }
 
 int main() {
@@ -283,11 +298,19 @@ int main() {
                     std::string msg;
                     if (std::isprint(ev.key_char))
                         msg = std::format(
-                                "KeyEvent -> key_down: {}, key_code: {}, key_char: {}", ev.key_down,
-                                KeyCodeInfo::DebugString(ev.key_code), ev.key_char
+                            "KeyEvent -> key_down: {}, key_code: {}, key_char: {}, modifiers: {}", 
+                            ev.key_down,
+                            KeyCodeInfo::DebugString(ev.key_code), 
+                            ev.key_char, 
+                            mod_str(ev.modifiers)
                         );
                     else
-                        msg = std::format("KeyEvent -> key_down: {}, key_code: {}", ev.key_down, KeyCodeInfo::DebugString(ev.key_code));
+                        msg = std::format(
+                        "KeyEvent -> key_down: {}, key_code: {}, modifiers: {}", 
+                            ev.key_down, 
+                            KeyCodeInfo::DebugString(ev.key_code), 
+                            mod_str(ev.modifiers)
+                        );
                     lines.push_back(msg);
                 },
                 [&](const FocusEvent &ev) {
@@ -357,57 +380,3 @@ int main() {
     Cleanup();
     return 0;
 }
-
-// std::visit(
-//      overloaded{
-//              [&](const KeyEvent &ev) {
-//                  std::string msg;
-//                  if (std::isprint(ev.key_char))
-//                      msg = std::format(
-//                              "KeyEvent -> key_down: {}, key_code: {}, key_char: {}", ev.key_down,
-//                              KeyCodeInfo::DebugString(ev.key_code), ev.key_char
-//                      );
-//                  else
-//                      msg = std::format("KeyEvent -> key_down: {}, key_code: {}", ev.key_down, KeyCodeInfo::DebugString(ev.key_code));
-//                  lines.push_back(msg);
-//                  if (ev.key_code == KeyCode::K_Q)
-//                      CloseWindow(state);
-//              },
-//              [&](const FocusEvent &ev) {
-//                  auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));
-//                  lines.push_back(msg);
-//              },
-//              [&](const ResizeEvent &ev) {
-//                  auto msg = std::format("ResizeEvent -> window resized {}x{}", ev.size.width, ev.size.height);
-//                  lines.push_back(msg);
-//              },
-//              [&](const MouseEvent &ev) {
-//                  switch (ev.kind) {
-//                  case MouseEventKind::DOWN:
-//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse down {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
-//                      break;
-//                  case MouseEventKind::UP:
-//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse up {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
-//                      break;
-//                  case MouseEventKind::MOVED:
-//                      mouse_pos = ev.pos;
-//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse moved", ev.pos.col, ev.pos.row));
-//                      break;
-//                  case MouseEventKind::SCROLL_DOWN:
-//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled down", ev.pos.col, ev.pos.row));
-//                      break;
-//                  case MouseEventKind::SCROLL_UP:
-//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled up", ev.pos.col, ev.pos.row));
-//                      break;
-//                  case MouseEventKind::SCROLL_LEFT:
-//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled left", ev.pos.col, ev.pos.row));
-//                      break;
-//                  case MouseEventKind::SCROLL_RIGHT:
-//                      lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled right", ev.pos.col, ev.pos.row));
-//                      break;
-//                  }
-//              },
-//              [&](const auto &) { lines.push_back("event caught"); },
-//      },
-//      event
-// );
