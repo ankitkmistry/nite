@@ -2,6 +2,8 @@
 
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -34,6 +36,34 @@ std::string btn_str(MouseButton btn) {
         return "RIGHT";
     }
     return "";
+}
+
+std::string quoted_str(std::string str) {
+    std::stringstream ss;
+    ss << std::quoted(str);
+    str = ss.str();
+    std::string new_str;
+    for (size_t i = 0; i < str.size(); i++) {
+        char c = str[i];
+        if (std::isprint(c)) new_str += c;
+        else new_str += std::format("\\x{:x}", c);
+    }
+    return new_str.substr(1, new_str.size() - 2);
+}
+
+std::string mod_str(uint8_t modifiers) {
+    std::string result;
+    if (modifiers & KEY_SHIFT) result += "SHIFT | ";
+    if (modifiers & KEY_CTRL) result += "CTRL | ";
+    if (modifiers & KEY_ALT) result += "ALT | ";
+    if (modifiers & KEY_SUPER) result += "SUPER | ";
+    if (modifiers & KEY_META) result += "META | ";
+    if (!result.empty()) {
+        result.pop_back();
+        result.pop_back();
+        result.pop_back();
+    } else return "NONE";
+    return result;
 }
 
 void hello_test(State &state) {
@@ -136,7 +166,7 @@ void hello_test(State &state) {
     EndDrawing(state);
 }
 
-void grid_test(State&state){
+void grid_test(State &state) {
     static int row_diff = 0;
     static int col_diff = 0;
 
@@ -249,33 +279,193 @@ void grid_test(State&state){
     EndDrawing(state);
 }
 
-std::string quoted_str(std::string str) {
-    std::stringstream ss;
-    ss << std::quoted(str);
-    str = ss.str();
-    std::string new_str;
-    for (size_t i = 0; i < str.size(); i++) {
-        char c = str[i];
-        if (std::isprint(c)) new_str += c;
-        else new_str += std::format("\\x{:x}", c);
+void linux_test(State &state) {
+    static Position pivot;
+    static std::vector<std::string> lines;
+
+    Event event;
+    while (PollEvent(state, event)) {
+        std::visit(overloaded {
+            [&](const KeyEvent &ev) {
+                if (ev.key_down) {
+                    if (ev.key_code == KeyCode::K_C && ev.modifiers == 0)
+                        lines.clear();
+                    if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
+                        CloseWindow(state);
+                }
+                std::string msg;
+                if (std::isprint(ev.key_char))
+                    msg = std::format(
+                        "KeyEvent -> key_down: {}, key_code: {}, key_char: {}, modifiers: {}", 
+                        ev.key_down,
+                        KeyCodeInfo::DebugString(ev.key_code), 
+                        ev.key_char, 
+                        mod_str(ev.modifiers)
+                    );
+                else
+                    msg = std::format(
+                    "KeyEvent -> key_down: {}, key_code: {}, modifiers: {}", 
+                        ev.key_down, 
+                        KeyCodeInfo::DebugString(ev.key_code), 
+                        mod_str(ev.modifiers)
+                    );
+                lines.push_back(msg);
+            },
+            [&](const FocusEvent &ev) {
+                auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));
+                lines.push_back(msg);
+            },
+            [&](const ResizeEvent &ev) {
+                auto msg = std::format("ResizeEvent -> window resized {}x{}", ev.size.width, ev.size.height);
+                lines.push_back(msg);
+            },
+            [&](const MouseEvent &ev) {
+                switch (ev.kind) {
+                case MouseEventKind::CLICK:
+                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse click {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
+                    break;
+                case MouseEventKind::DOUBLE_CLICK:
+                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse click2 {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
+                    break;
+                case MouseEventKind::MOVED:
+                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse moved", ev.pos.col, ev.pos.row));
+                    break;
+                case MouseEventKind::SCROLL_DOWN:
+                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled down", ev.pos.col, ev.pos.row));
+                    break;
+                case MouseEventKind::SCROLL_UP:
+                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled up", ev.pos.col, ev.pos.row));
+                    break;
+                case MouseEventKind::SCROLL_LEFT:
+                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled left", ev.pos.col, ev.pos.row));
+                    break;
+                case MouseEventKind::SCROLL_RIGHT:
+                    lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled right", ev.pos.col, ev.pos.row));
+                    break;
+                }
+            },
+            [&](const DebugEvent &ev) {
+                lines.push_back(ev.text);
+            },
+            [&](const auto &) {},
+        }, event);
     }
-    return new_str.substr(1, new_str.size() - 2);
+    
+    BeginDrawing(state);
+
+    Text(state, {
+        .text = "Hello World from Linux",
+    });
+
+    const auto size = GetBufferSize(state);
+    
+    BeginScrollPane(state, pivot, {
+        .pos = {.col = 0,.row = 1},
+        .min_size = {.width = size.width, .height = size.height - 1},
+        .max_size = {.width = size.width * 2, .height = size.height * 2},
+        .scroll_factor = 2,
+    }); {
+        size_t i = lines.size() < size.height - 1 ? 0 : lines.size() - (size.height - 1);
+        for (size_t j = 0; i < lines.size(); i++, j++)
+            Text(state, {
+                .text = quoted_str(lines[i]),
+                .pos = {.col = 0, .row = j},
+            });
+    } EndPane(state);
+
+    EndDrawing(state);
 }
 
-std::string mod_str(uint8_t modifiers) {
-    std::string result;
-    if (modifiers & KEY_SHIFT) result += "SHIFT | ";
-    if (modifiers & KEY_CTRL) result += "CTRL | ";
-    if (modifiers & KEY_ALT) result += "ALT | ";
-    if (modifiers & KEY_SUPER) result += "SUPER | ";
-    if (modifiers & KEY_META) result += "META | ";
-    if (!result.empty()) {
-        result.pop_back();
-        result.pop_back();
-        result.pop_back();
-    } else return "NONE";
+// clang-format on
+
+#include "stb_image.h"
+
+class ImageView {
+    std::vector<uint8_t> img;
+    size_t width;
+    size_t height;
+
+  public:
+    ImageView(int width, int height) : img(height * width, 0), width(width), height(height) {}
+
+    ImageView(uint8_t *img, int width, int height) : img(img, img + height * width), width(width), height(height) {}
+
+    uint8_t operator()(size_t x, size_t y) const {
+        return img[y * width + x];
+    }
+
+    uint8_t &operator()(size_t x, size_t y) {
+        return img[y * width + x];
+    }
+
+    size_t get_width() const {
+        return width;
+    }
+
+    size_t get_height() const {
+        return height;
+    }
+};
+
+ImageView load_image(const char *filename) {
+    int width, height, channels;
+    unsigned char *img = stbi_load(filename, &width, &height, &channels, STBI_grey);
+    if (img == NULL) {
+        std::cerr << "could not open file: " << filename << std::endl;
+        std::exit(1);
+    }
+    std::cout << "opened file: " << filename << std::endl;
+    std::cout << "width: " << width << std::endl;
+    std::cout << "height: " << height << std::endl;
+    std::cout << "channels: " << channels << std::endl;
+
+    auto result = ImageView(img, width, height);
+    stbi_image_free(img);
     return result;
 }
+
+void write_pgm(const ImageView &image, const char *filename) {
+    std::ofstream out(filename);
+    out << std::format("P2\n{} {}\n255\n", image.get_width(), image.get_height());
+    for (size_t y = 0; y < image.get_height(); y++) {
+        for (size_t x = 0; x < image.get_width(); x++) {
+            out << std::to_string(static_cast<int>(image(x, y))) << " ";
+        }
+        out << "\n";    // Add newline after each row for better readability
+    }
+}
+
+ImageView down_scale(const ImageView &image, size_t x_scale, size_t y_scale) {
+    const size_t width = image.get_width() / x_scale;
+    const size_t height = image.get_height() / y_scale;
+
+    ImageView result(width, height);
+
+    for (size_t y = 0; y < height; y++) {
+        for (size_t x = 0; x < width; x++) {
+            size_t sum = 0;
+            for (size_t dy = 0; dy < y_scale; dy++)
+                for (size_t dx = 0; dx < x_scale; dx++)
+                    sum += image(x * x_scale + dx, y * y_scale + dy);
+            result(x, y) = sum / (x_scale * y_scale);
+        }
+    }
+
+    return result;
+}
+
+int main1() {
+    // by a factor of 25
+    ImageView image = load_image("../res/musashi.jpg");
+    write_pgm(image, "../res/musashi1.pgm");
+    for (size_t i = 2; i <= 8; i++) {
+        ImageView down_scaled = down_scale(image, i, i);
+        write_pgm(down_scaled, std::format("../res/musashi{}.pgm", i).c_str());
+    }
+    return 0;
+}
+
+// clang-format off
 
 int main() {
     auto &state = GetState();
@@ -284,94 +474,39 @@ int main() {
         return 1;
     }
 
-    Position pivot;
-    std::vector<std::string> lines;
+    Position scroll_pivot;
+
+    ImageView image = load_image("../res/musashi.jpg");
+    // image = down_scale(image, 6, 12);
 
     while (!ShouldWindowClose(state)) {
         Event event;
         while (PollEvent(state, event)) {
             std::visit(overloaded {
                 [&](const KeyEvent &ev) {
-                    if (ev.key_down)
+                    if (ev.key_down) {
                         if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
                             CloseWindow(state);
-                    std::string msg;
-                    if (std::isprint(ev.key_char))
-                        msg = std::format(
-                            "KeyEvent -> key_down: {}, key_code: {}, key_char: {}, modifiers: {}", 
-                            ev.key_down,
-                            KeyCodeInfo::DebugString(ev.key_code), 
-                            ev.key_char, 
-                            mod_str(ev.modifiers)
-                        );
-                    else
-                        msg = std::format(
-                        "KeyEvent -> key_down: {}, key_code: {}, modifiers: {}", 
-                            ev.key_down, 
-                            KeyCodeInfo::DebugString(ev.key_code), 
-                            mod_str(ev.modifiers)
-                        );
-                    lines.push_back(msg);
-                },
-                [&](const FocusEvent &ev) {
-                    auto msg = std::format("FocusEvent -> focus {}", (ev.focus_gained ? "gained" : "lost"));
-                    lines.push_back(msg);
-                },
-                [&](const ResizeEvent &ev) {
-                    auto msg = std::format("ResizeEvent -> window resized {}x{}", ev.size.width, ev.size.height);
-                    lines.push_back(msg);
-                },
-                [&](const MouseEvent &ev) {
-                    switch (ev.kind) {
-                    case MouseEventKind::CLICK:
-                        lines.push_back(std::format("MouseEvent ({}, {}) -> mouse click {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
-                        break;
-                    case MouseEventKind::DOUBLE_CLICK:
-                        lines.push_back(std::format("MouseEvent ({}, {}) -> mouse click2 {}", ev.pos.col, ev.pos.row, btn_str(ev.button)));
-                        break;
-                    case MouseEventKind::MOVED:
-                        lines.push_back(std::format("MouseEvent ({}, {}) -> mouse moved", ev.pos.col, ev.pos.row));
-                        break;
-                    case MouseEventKind::SCROLL_DOWN:
-                        lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled down", ev.pos.col, ev.pos.row));
-                        break;
-                    case MouseEventKind::SCROLL_UP:
-                        lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled up", ev.pos.col, ev.pos.row));
-                        break;
-                    case MouseEventKind::SCROLL_LEFT:
-                        lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled left", ev.pos.col, ev.pos.row));
-                        break;
-                    case MouseEventKind::SCROLL_RIGHT:
-                        lines.push_back(std::format("MouseEvent ({}, {}) -> mouse scrolled right", ev.pos.col, ev.pos.row));
-                        break;
                     }
                 },
-                [&](const DebugEvent &ev) {
-                    lines.push_back(ev.text);
-                },
-                [&](const auto &) {},
+                [](const auto &) {},
             }, event);
         }
-        
+
         BeginDrawing(state);
-        Text(state, {
-            .text = "Hello World from Linux",
-        });
 
         const auto size = GetBufferSize(state);
-        
-        BeginScrollPane(state, pivot, {
-            .pos = {.col = 0,.row = 1},
-            .min_size = {.width = size.width, .height = size.height - 1},
-            .max_size = {.width = size.width * 2, .height = size.height * 2},
+        const Size max_size {.width = image.get_width(), .height = image.get_height()};
+
+        BeginScrollPane(state, scroll_pivot, {
+            .pos = {},
+            .min_size = size,
+            .max_size = max_size,
             .scroll_factor = 2,
         }); {
-            size_t i = lines.size() < size.height - 1 ? 0 : lines.size() - (size.height - 1);
-            for (size_t j = 0; i < lines.size(); i++, j++)
-                Text(state, {
-                    .text = quoted_str(lines[i]),
-                    .pos = {.col = 0, .row = j},
-                });
+            for (size_t y = 0; y < image.get_height(); y++)
+                for (size_t x = 0; x < image.get_width(); x++)
+                    SetCell(state, ' ', {.x = x, .y = y}, {.bg = Color::from_rgb(image(x, y))});
         } EndPane(state);
 
         EndDrawing(state);

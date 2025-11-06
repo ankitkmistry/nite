@@ -52,6 +52,10 @@ namespace nite
     struct Color {
         uint8_t r = 0, g = 0, b = 0;
 
+        constexpr static Color from_rgb(const uint8_t value) {
+            return Color{.r = value, .g = value, .b = value};
+        }
+
         constexpr static Color from_rgb(const uint8_t r, const uint8_t g, const uint8_t b) {
             return Color{.r = r, .g = g, .b = b};
         }
@@ -235,6 +239,26 @@ namespace nite
     struct Size {
         size_t width = 0;
         size_t height = 0;
+
+        Size operator*(const size_t factor) const {
+            return {.width = width * factor, .height = height * factor};
+        }
+
+        Size operator/(const size_t factor) const {
+            return {.width = width / factor, .height = height / factor};
+        }
+
+        Size &operator*=(const size_t factor) {
+            width *= factor;
+            height *= factor;
+            return *this;
+        }
+
+        Size &operator/=(const size_t factor) {
+            width /= factor;
+            height /= factor;
+            return *this;
+        }
 
         constexpr bool operator==(const Size &other) const {
             return width == other.width && height == other.height;
@@ -1024,7 +1048,7 @@ namespace nite
     enum class MouseButton {
         NONE,
         LEFT,
-        MIDDLE, // TODO: add middle button support for windows
+        MIDDLE,    // TODO: add middle button support for windows
         RIGHT,
     };
 
