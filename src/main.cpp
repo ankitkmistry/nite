@@ -489,19 +489,65 @@ void image_test(State &state) {
     EndDrawing(state);
 }
 
+void align_test(State &state) {
+    static size_t align = 0;
+    static double value = 0;
+    static std::vector<StyledChar> motion = [] () {
+        std::vector<StyledChar> result(SLEEK_MOTION.begin(), SLEEK_MOTION.end());
+        for (auto &it: result)
+            it.style.bg = COLOR_LIME;
+        return result;
+    } ();
+
+    Event event;
+    while (PollEvent(state, event)) {
+        std::visit(overloaded {
+            [&](const KeyEvent &ev) {
+                if (ev.key_down) {
+                    if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
+                        CloseWindow(state);
+                    if (ev.key_code == KeyCode::ENTER && ev.modifiers == 0)
+                        align++;
+                }
+            },
+            [](const auto &) {},
+        }, event);
+    }
+
+    if (value > 1)
+        value = 0;
+    value += GetDeltaTime(state) / 2;
+
+    BeginDrawing(state);
+    const auto size = GetBufferSize(state);
+
+    TextBox(state, {
+        .text = "Hello, World\nThis is an example of multiline text\nThis is amazing\n \nPress Esc to quit, Enter to change alignment",
+        .size = size,
+        .align = static_cast<Align>(align % 9),
+    });
+
+    // DrawVDivider(state, size.width / 2);
+    // DrawHDivider(state, size.height / 2);
+    // SetCell(state, BORDER_SLEEK.center.value, {.col = size.width / 2, .row = size.height / 2});
+
+    ProgressBar(state, {
+        .value = value,
+        .pos = {.col = 0, .row = size.height / 2},
+        .length = size.width,
+        .motion = motion,
+        .style = {.bg = COLOR_LIME},
+    });
+
+    EndDrawing(state);
+}
+
 int main() {
     auto &state = GetState();
     if (const auto result = Initialize(state); !result) {
         std::cerr << result.what() << std::endl;
         return 1;
     }
-
-    size_t align = 0;
-    double value = 0;
-
-    std::vector<StyledChar> motion(SLEEK_MOTION.begin(), SLEEK_MOTION.end());
-    for (auto &it: motion)
-        it.style.bg = COLOR_LIME;
 
     while (!ShouldWindowClose(state)) {
         Event event;
@@ -511,39 +557,26 @@ int main() {
                     if (ev.key_down) {
                         if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
                             CloseWindow(state);
-                        if (ev.key_code == KeyCode::ENTER && ev.modifiers == 0)
-                            align++;
                     }
                 },
                 [](const auto &) {},
             }, event);
         }
 
-        if (value > 1)
-            value = 0;
-        value += GetDeltaTime(state) / 2;
-
         BeginDrawing(state);
-        const auto size = GetBufferSize(state);
-
-        TextBox(state, {
-            .text = "Hello, World\nThis is an example of multiline text\nThis is amazing\n \nPress Esc to quit, Enter to change alignment",
-            .size = size,
-            .align = static_cast<Align>(align % 9),
+        SimpleTable(state, {
+            .data = {
+                "First name",   "Last name",
+                "Ankit",        "Kumar Mistry",
+                "Ajit",         "Kumar Mistry",
+                "Nandita",      "Mistry",
+                "Aashita",      "Mistry",
+            },
+            .include_header_row = true,
+            .num_cols = 2,
+            .num_rows = 5,
+            .pos = {},
         });
-
-        // DrawVDivider(state, size.width / 2);
-        // DrawHDivider(state, size.height / 2);
-        // SetCell(state, BORDER_SLEEK.center.value, {.col = size.width / 2, .row = size.height / 2});
-
-        ProgressBar(state, {
-            .value = value,
-            .pos = {.col = 0, .row = size.height / 2},
-            .length = size.width,
-            .motion = motion,
-            .style = {.bg = COLOR_LIME},
-        });
-
         EndDrawing(state);
     }
 

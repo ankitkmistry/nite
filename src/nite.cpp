@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <cwchar>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -79,6 +80,20 @@ static std::string wc_to_string(const wchar_t c) {
 
 static inline constexpr bool is_print(char c) {
     return 32 <= c && c <= 126;
+}
+
+template<std::unsigned_integral Integer>
+static inline constexpr Integer saturated_sub(Integer a, Integer b) {
+    if (a >= b)
+        return a - b;
+    return 0;
+}
+
+template<std::unsigned_integral Integer>
+static inline constexpr Integer saturated_add(Integer a, Integer b) {
+    if (a <= std::numeric_limits<Integer>::max() - b)
+        return a + b;
+    return std::numeric_limits<Integer>::max();
 }
 
 namespace nite
@@ -1115,6 +1130,67 @@ namespace nite
 
         for (; col < info.length; col++)
             state.impl->set_cell(info.pos.col + col, info.pos.row, ' ', info.style);
+    }
+
+    void SimpleTable(State &state, SimpleTableInfo info) {
+        Style header_style1 = info.header_style;
+        Style header_style2;
+        header_style2.bg = Color::from_hex(saturated_add(header_style1.bg.get_hex(), 0x151515u));
+        header_style2.fg = header_style1.fg;
+        header_style2.mode = header_style1.mode;
+
+        Style table_style1 = info.table_style;
+        Style table_style2;
+        table_style2.bg = Color::from_hex(saturated_add(table_style1.bg.get_hex(), 0x151515u));
+        table_style2.fg = table_style1.fg;
+        table_style2.mode = table_style1.mode;
+
+        size_t total_width = 0;
+        std::vector<size_t> max_col_widths(info.num_cols);
+        for (size_t col = 0; col < info.num_cols; col++) {
+            size_t max = 0;
+            for (size_t row = 0; row < info.num_rows; row++) {
+                const auto &cell_text = info.data[row * info.num_cols + col];
+                if (cell_text.size() + 1 >= max)
+                    max = cell_text.size() + 1;
+            }
+            total_width += max_col_widths[col] = max;
+        }
+
+        Size size = {.width = total_width, .height = info.num_rows};
+        BeginPane(state, info.pos, size);
+
+        if (info.show_border)
+            ;    // TODO: implement this
+        else {
+            size_t y = 0;
+            for (size_t row = 0; row < info.num_rows; row++) {
+                size_t x = 0;
+                for (size_t col = 0; col < info.num_cols; col++) {
+                    const auto &cell_text = info.data[row * info.num_cols + col];
+                    Style style;
+                    if (info.include_header_row) {
+                        if (row == 0)
+                            style = col % 2 == 0 ? header_style2 : header_style1;
+                        else
+                            style = (row + col) % 2 == 0 ? table_style2 : table_style1;
+                    } else
+                        style = (row + col) % 2 == 0 ? table_style2 : table_style1;
+                    // clang-format off
+                    TextBox(state, {
+                        .text = cell_text,
+                        .pos = {.x = x, .y = y},
+                        .size = {.width = max_col_widths[col], .height = 1},
+                        .style = style,
+                    });
+                    // clang-format on
+                    x += max_col_widths[col];
+                }
+                y++;
+            }
+        }
+
+        EndPane(state);
     }
 
     template<class... Ts>
@@ -2344,7 +2420,7 @@ namespace nite::internal
             if (match(';')) {
                 // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#modifiers
                 if (uint8_t val; match_number(val))
-                    key_modifiers = val == 0 ? 0 : val - 1;
+                    key_modifiers = saturated_sub(val, 1);
             }
 
             char functional;

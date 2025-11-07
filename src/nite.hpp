@@ -70,6 +70,10 @@ namespace nite
             };
         }
 
+        constexpr uint32_t get_hex() const {
+            return (r << 16) | (g << 8) | b;
+        }
+
         constexpr Color invert() const {
             return Color{.r = static_cast<uint8_t>(255 - r), .g = static_cast<uint8_t>(255 - g), .b = static_cast<uint8_t>(255 - b)};
         }
@@ -902,11 +906,11 @@ namespace nite
 
     // TODO: find a better way to describe progress bar motion
 
-    inline static constexpr std::array<StyledChar, 1> DEFAULT_MOTION = {
+    inline static constexpr std::array DEFAULT_MOTION = {
             StyledChar{L'█', {}},
     };
 
-    inline static constexpr std::array<StyledChar, 8> SLEEK_MOTION = {
+    inline static constexpr std::array SLEEK_MOTION = {
             StyledChar{L'▏', {}},
             StyledChar{L'▎', {}},
             StyledChar{L'▍', {}},
@@ -949,6 +953,22 @@ namespace nite
     };
 
     void ProgressBar(State &state, ProgressBarInfo info);
+
+    struct SimpleTableInfo {
+        std::vector<std::string> data;
+        bool include_header_row = true;
+        size_t num_cols = 0;
+        size_t num_rows = 0;
+
+        Position pos;
+        Style header_style = {.bg = COLOR_TEAL, .fg = COLOR_WHITE, .mode = STYLE_BOLD};
+        Style table_style = {.bg = COLOR_NAVY, .fg = COLOR_SILVER};
+
+        bool show_border = false;
+        Border border = BORDER_DEFAULT;
+    };
+
+    void SimpleTable(State &state, SimpleTableInfo info);
 }    // namespace nite
 
 // --------------------------------
