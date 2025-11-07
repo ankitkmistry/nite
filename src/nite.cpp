@@ -851,6 +851,14 @@ namespace nite
         }
     }
 
+    void DrawHDivider(State &state, size_t row, wchar_t value, Style style) {
+        DrawLine(state, {.col = 0, .row = row}, {.col = state.impl->get_selected().get_size().width, .row = row}, value, style);
+    }
+
+    void DrawVDivider(State &state, size_t col, wchar_t value, Style style) {
+        DrawLine(state, {.col = col, .row = 0}, {.col = col, .row = state.impl->get_selected().get_size().height}, value, style);
+    }
+
     void Text(State &state, TextInfo info) {
         if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
             state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));

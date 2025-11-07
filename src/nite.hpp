@@ -701,7 +701,9 @@ namespace nite
 
     void EndPane(State &state);
 
-    void DrawBorder(State &state, const Border &border);
+    void DrawBorder(State &state, const Border &border = BORDER_DEFAULT);
+    void DrawHDivider(State &state, size_t row, wchar_t fill = L'─', Style style = {});
+    void DrawVDivider(State &state, size_t col, wchar_t fill = L'│', Style style = {});
 
     struct TextInfo {
         std::string text = {};

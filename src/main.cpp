@@ -523,6 +523,10 @@ int main() {
             .align = static_cast<Align>(align % 9),
         });
 
+        // DrawVDivider(state, size.width / 2);
+        // DrawHDivider(state, size.height / 2);
+        // SetCell(state, BORDER_SLEEK.center.value, {.col = size.width / 2, .row = size.height / 2});
+
         EndDrawing(state);
     }
 
