@@ -499,6 +499,10 @@ int main() {
     size_t align = 0;
     double value = 0;
 
+    std::vector<StyledChar> motion(SLEEK_MOTION.begin(), SLEEK_MOTION.end());
+    for (auto &it: motion)
+        it.style.bg = COLOR_LIME;
+
     while (!ShouldWindowClose(state)) {
         Event event;
         while (PollEvent(state, event)) {
@@ -523,7 +527,7 @@ int main() {
         const auto size = GetBufferSize(state);
 
         TextBox(state, {
-            .text = "Hello, World\nThis is an example of multiline text\n \nThis is amazing\nPress Esc to quit, Enter to change alignment",
+            .text = "Hello, World\nThis is an example of multiline text\nThis is amazing\n \nPress Esc to quit, Enter to change alignment",
             .size = size,
             .align = static_cast<Align>(align % 9),
         });
@@ -536,7 +540,8 @@ int main() {
             .value = value,
             .pos = {.col = 0, .row = size.height / 2},
             .length = size.width,
-            .motion = {SLEEK_MOTION.begin(), SLEEK_MOTION.end()},
+            .motion = motion,
+            .style = {.bg = COLOR_LIME},
         });
 
         EndDrawing(state);

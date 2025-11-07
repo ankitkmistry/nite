@@ -1112,6 +1112,9 @@ namespace nite
                 col++;
             }
         }
+
+        for (; col < info.length; col++)
+            state.impl->set_cell(info.pos.col + col, info.pos.row, ' ', info.style);
     }
 
     template<class... Ts>
