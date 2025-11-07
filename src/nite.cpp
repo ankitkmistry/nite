@@ -173,7 +173,8 @@ namespace nite
         };
 
         class ScrollBox : public Box {
-            bool scroll_bar;
+            bool hscroll_bar;
+            bool vscroll_bar;
             ScrollBar scroll_style;
             Position pos;
             Position pivot;
@@ -182,16 +183,26 @@ namespace nite
 
           public:
             ScrollBox(
-                    bool show_scroll_bar, const ScrollBar &scroll_style, const Position pos, const Position pivot, const Size min_size,
-                    const Size max_size
+                    bool show_hscroll_bar, bool show_vscroll_bar, const ScrollBar &scroll_style, const Position pos, const Position pivot,
+                    const Size min_size, const Size max_size
             )
-                : scroll_bar(show_scroll_bar), scroll_style(scroll_style), pos(pos), pivot(pivot), min_size(min_size), max_size(max_size) {}
+                : hscroll_bar(show_hscroll_bar),
+                  vscroll_bar(show_vscroll_bar),
+                  scroll_style(scroll_style),
+                  pos(pos),
+                  pivot(pivot),
+                  min_size(min_size),
+                  max_size(max_size) {}
 
             ScrollBox() = default;
             ~ScrollBox() = default;
 
-            bool show_scroll_bar() const {
-                return scroll_bar;
+            bool show_hscroll_bar() const {
+                return hscroll_bar;
+            }
+
+            bool show_vscroll_bar() const {
+                return vscroll_bar;
             }
 
             const ScrollBar &get_scroll_style() const {
@@ -631,6 +642,9 @@ namespace nite
     }
 
     static void scroll_vertical(Position &pivot, ScrollPaneInfo &info, intmax_t value) {
+        if (!info.show_vscroll_bar)
+            return;
+
         value *= info.scroll_factor;
         if (value == 0)
             return;
@@ -652,6 +666,9 @@ namespace nite
     }
 
     static void scroll_horizontal(Position &pivot, ScrollPaneInfo &info, intmax_t value) {
+        if (!info.show_hscroll_bar)
+            return;
+
         value *= info.scroll_factor;
         if (value == 0)
             return;
@@ -703,7 +720,8 @@ namespace nite
 
         state.impl->selected_stack.push(
                 std::make_unique<internal::ScrollBox>(
-                        info.show_scroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
+                        info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos, pivot,
+                        info.min_size, info.max_size
                 )
         );
     }
@@ -758,14 +776,14 @@ namespace nite
 
     void EndPane(State &state) {
         const internal::Box &box = state.impl->get_selected();
-        if (const auto scroll_box = dynamic_cast<const internal::ScrollBox *>(&box); scroll_box && scroll_box->show_scroll_bar()) {
+        if (const auto scroll_box = dynamic_cast<const internal::ScrollBox *>(&box); scroll_box) {
             const auto &scroll = scroll_box->get_scroll_style();
             const auto max_size = scroll_box->get_max_size();
             const auto min_size = scroll_box->get_min_size();
             const auto pivot = scroll_box->get_pivot();
 
             // Vertical scroll
-            if (min_size.height != max_size.height) {
+            if (scroll_box->show_vscroll_bar() && min_size.height != max_size.height) {
                 const auto vscroll_start = Position{.col = min_size.width - 1, .row = 1} + pivot;
                 const auto vscroll_end = Position{.col = min_size.width - 1, .row = min_size.height - 2} + pivot;
                 DrawLine(state, vscroll_start, vscroll_end, scroll.v_bar.value, scroll.v_bar.style);
@@ -785,7 +803,7 @@ namespace nite
                 SetCell(state, scroll.home.value, home_cell, scroll.home.style);
             }
             // Horizontal scroll
-            if (min_size.width != max_size.width) {
+            if (scroll_box->show_hscroll_bar() && min_size.width != max_size.width) {
                 const auto hscroll_start = Position{.col = 1, .row = min_size.height - 1} + pivot;
                 const auto hscroll_end = Position{.col = min_size.width - 2, .row = min_size.height - 1} + pivot;
                 DrawLine(state, hscroll_start, hscroll_end, scroll.h_bar.value, scroll.h_bar.style);
@@ -881,15 +899,168 @@ namespace nite
                 info.on_hover(std::forward<TextBoxInfo &>(info));
         }
 
-        size_t i = 0;
-        for (size_t row = 0; row < info.size.height; row++)
-            for (size_t col = 0; col < info.size.width; col++) {
-                if (i < info.text.size()) {
-                    state.impl->set_cell(info.pos.col + col, info.pos.row + row, info.text[i], info.style);
-                    i++;
+        std::vector<std::string> lines;
+        std::istringstream ss(info.text);
+        for (std::string line; std::getline(ss, line);)
+            if (info.wrap)
+                for (size_t i = 0; i < line.size(); i += info.size.width)
+                    lines.push_back(line.substr(i, info.size.width));
+            else
+                lines.push_back(line);
+
+        BeginPane(state, info.pos, info.size);
+
+        switch (info.align) {
+        case Align::TOP_LEFT:
+            for (size_t row = 0; row < info.size.height; row++)
+                if (row < lines.size()) {
+                    const auto &line = lines[row];
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col < line.size())
+                            state.impl->set_cell(col, row, line[col], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
                 } else
-                    state.impl->set_cell(info.pos.col + col, info.pos.row + row, ' ', info.style);
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            break;
+        case Align::TOP:
+            for (size_t row = 0; row < info.size.height; row++)
+                if (row < lines.size()) {
+                    const auto &line = lines[row];
+                    const auto col_start = (info.size.width - line.size()) / 2;
+                    const auto col_end = col_start + line.size();
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            break;
+        case Align::TOP_RIGHT:
+            for (size_t row = 0; row < info.size.height; row++)
+                if (row < lines.size()) {
+                    const auto &line = lines[row];
+                    const auto col_start = info.size.width - line.size();
+                    const auto col_end = info.size.width;
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            break;
+        case Align::LEFT:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = (info.size.height - lines.size()) / 2;
+                const auto row_end = row_start + lines.size();
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col < line.size())
+                            state.impl->set_cell(col, row, line[col], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
             }
+            break;
+        case Align::CENTER:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = (info.size.height - lines.size()) / 2;
+                const auto row_end = row_start + lines.size();
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    const auto col_start = (info.size.width - line.size()) / 2;
+                    const auto col_end = col_start + line.size();
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::RIGHT:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = (info.size.height - lines.size()) / 2;
+                const auto row_end = row_start + lines.size();
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    const auto col_start = info.size.width - line.size();
+                    const auto col_end = info.size.width;
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::BOTTOM_LEFT:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = info.size.height - lines.size();
+                const auto row_end = info.size.height;
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col < line.size())
+                            state.impl->set_cell(col, row, line[col], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::BOTTOM:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = info.size.height - lines.size();
+                const auto row_end = info.size.height;
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    const auto col_start = (info.size.width - line.size()) / 2;
+                    const auto col_end = col_start + line.size();
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::BOTTOM_RIGHT:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = info.size.height - lines.size();
+                const auto row_end = info.size.height;
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    const auto col_start = info.size.width - line.size();
+                    const auto col_end = info.size.width;
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start], info.style);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        }
+
+        EndPane(state);
     }
 
     template<class... Ts>
@@ -1099,15 +1270,16 @@ namespace nite::internal::console
 
     static DWORD old_in_mode = 0, old_out_mode = 0;
     static UINT old_console_cp = 0;
+    static std::string old_locale;
 
     Result init() {
         static const HANDLE h_conin = GetStdHandle(STD_INPUT_HANDLE);
         static const HANDLE h_conout = GetStdHandle(STD_OUTPUT_HANDLE);
 
-        if (!GetConsoleMode(h_conin, &old_in_mode))
-            return std::format("error getting console in mode: {}", get_last_error());
         if (!GetConsoleMode(h_conout, &old_out_mode))
             return std::format("error getting console out mode: {}", get_last_error());
+        if (!GetConsoleMode(h_conin, &old_in_mode))
+            return std::format("error getting console in mode: {}", get_last_error());
         if ((old_console_cp = GetConsoleOutputCP()) == 0)
             return std::format("error getting console code page: {}", get_last_error());
 
@@ -1129,23 +1301,34 @@ namespace nite::internal::console
         if (!SetConsoleOutputCP(CP_UTF8))
             return std::format("error setting console code page: {}", get_last_error());
 
-        print(CSI "?1049h");    // Enter alternate buffer
-        print(CSI "?25l");      // Hide console cursor
-        clear();
+        // Set locale to utf-8
+        old_locale = std::setlocale(LC_CTYPE, NULL);
+        std::setlocale(LC_CTYPE, "en_US.utf8");
+
+        $(print(CSI "?1049h"));    // Enter alternate buffer
+        $(print(CSI "?25l"));      // Hide console cursor
+        $(print(CSI "?30l"));      // Do not show scroll bar
+
+        $(clear());
         return true;
     }
 
     Result restore() {
-        clear();
-        print(CSI "?25h");      // Show console cursor
-        print(CSI "?1049l");    // Exit alternate buffer
+        $(clear());
 
+        $(print(CSI "?30h"));      // Show scroll bar
+        $(print(CSI "?25h"));      // Show console cursor
+        $(print(CSI "?1049l"));    // Exit alternate buffer
+
+        // Restore locale
+        std::setlocale(LC_CTYPE, old_locale.c_str());
+
+        if (!SetConsoleOutputCP(old_console_cp))
+            return std::format("error setting console code page: {}", get_last_error());
         if (!SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), old_in_mode))
             return std::format("error setting console in mode: {}", get_last_error());
         if (!SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), old_out_mode))
             return std::format("error setting console out mode: {}", get_last_error());
-        if (!SetConsoleOutputCP(old_console_cp))
-            return std::format("error setting console code page: {}", get_last_error());
         return true;
     }
 }    // namespace nite::internal::console
@@ -1808,7 +1991,7 @@ namespace nite::internal::console
         if (tcsetattr(STDIN_FILENO, TCSANOW, &new_term) == -1)
             return std::format("error setting terminal attributes: {}", get_last_error());
 
-        // Setup console locale to utf-8
+        // Set locale to utf-8
         old_locale = std::setlocale(LC_CTYPE, NULL);
         std::setlocale(LC_CTYPE, "en_US.utf8");
 
@@ -2029,7 +2212,7 @@ namespace nite::internal
         // 0x09         -> Tab
         // any printable char
         Result parse_key_and_focus(Event &event) {
-            if (peek() != '\x1b') {
+            if (peek() != ESC) {
                 switch (advance()) {
                 case 0x0d:
                     event = KeyEvent{
@@ -2073,7 +2256,7 @@ namespace nite::internal
                 event = KeyEvent{
                         .key_down = true,
                         .key_code = KeyCode::ESCAPE,
-                        .key_char = '\x1b',
+                        .key_char = ESC,
                         .modifiers = 0,
                 };
                 return true;
@@ -2343,7 +2526,7 @@ namespace nite::internal
         }
 
         Result expect_csi() {
-            if (peek() == '\x1b' && peek(1) == '[') {
+            if (peek() == ESC && peek(1) == '[') {
                 advance();
                 advance();
                 return true;

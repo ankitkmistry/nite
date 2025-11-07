@@ -62,8 +62,8 @@ std::string mod_str(uint8_t modifiers) {
         result.pop_back();
         result.pop_back();
         result.pop_back();
+        return result;
     } else return "NONE";
-    return result;
 }
 
 void hello_test(State &state) {
@@ -124,25 +124,19 @@ void hello_test(State &state) {
     });
     DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = COLOR_RED, .mode = STYLE_RESET | STYLE_BOLD});
 
-
     BeginScrollPane(state, scroll_pivot, {
         .pos = {.col = 0, .row = 4},
         .min_size = {.width = size.width,     .height = size.height - 4},
         .max_size = {.width = size.width * 2, .height = size.height * 2},
         .scroll_factor = 2,
-        .show_scroll_bar = true,
-    });
-    {
-        for (size_t i = 0; i < lines.size(); i++) {
+    }); {
+        for (size_t i = 0; i < lines.size(); i++) 
             Text(state, {.text = lines[i], .pos = {.col = 0, .row = i}});
-        }
-    }
-    EndPane(state);
+    } EndPane(state);
 
     FillBackground(state, Color::from_hex(0x0950df));
 
-    BeginPane(state, {.col = size.width / 2, .row = 0}, {.width = size.width / 2, .height = 3});
-    {
+    BeginPane(state, {.col = size.width / 2, .row = 0}, {.width = size.width / 2, .height = 3}); {
         // DrawBorder(state, BORDER_DEFAULT);
         FillBackground(state, Color::from_hex(0x165d2a));
         Text(state, {
@@ -158,8 +152,7 @@ void hello_test(State &state) {
            .on_hover = [](TextBoxInfo &info) { info.style.bg = Color::from_hex(0x067bd8); },
            .on_click = [&](TextBoxInfo &) { text = "clicked"; },
         });
-    }
-    EndPane(state);
+    } EndPane(state);
 
     SetCell(state, ' ', GetMousePosition(state), {.bg = COLOR_SILVER});
 
@@ -190,8 +183,7 @@ void grid_test(State &state) {
         .row_sizes = {(double) (50 - row_diff), (double) (50 + row_diff)},
     });
 
-    BeginGridCell(state, 0, 0);
-    {
+    BeginGridCell(state, 0, 0); {
         Text(state, {"Hello from 0, 0"});
         Text(state, {
             .text = "+ Col",
@@ -251,29 +243,22 @@ void grid_test(State &state) {
         });
         FillBackground(state, COLOR_WHITE);
         FillForeground(state, COLOR_BLACK);
-    }
-    EndPane(state);
+    } EndPane(state);
 
-    BeginGridCell(state, 0, 1);
-    {
+    BeginGridCell(state, 0, 1); {
         Text(state, {"Hello from 0, 1"});
         FillBackground(state, COLOR_RED);
-    }
-    EndPane(state);
+    } EndPane(state);
 
-    BeginGridCell(state, 1, 1);
-    {
+    BeginGridCell(state, 1, 1); {
         Text(state, {"Hello from 1, 1"});
         FillBackground(state, COLOR_BLUE);
-    }
-    EndPane(state);
+    } EndPane(state);
 
-    BeginGridCell(state, 1, 0);
-    {
+    BeginGridCell(state, 1, 0); {
         Text(state, {"Hello from 1, 0"});
         FillBackground(state, COLOR_GREEN);
-    }
-    EndPane(state);
+    } EndPane(state);
 
     EndPane(state);
     EndDrawing(state);
@@ -353,9 +338,7 @@ void linux_test(State &state) {
     
     BeginDrawing(state);
 
-    Text(state, {
-        .text = "Hello World from Linux",
-    });
+    Text(state, {.text = "Hello World from Linux"});
 
     const auto size = GetBufferSize(state);
     
@@ -467,18 +450,53 @@ int main1() {
 
 // clang-format off
 
+void image_test(State &state) {
+    static Position scroll_pivot;
+    static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 6, 10);
+    // static ImageView image = down_scale(load_image("../res/musashi.png"), 6, 10);
+
+    Event event;
+    while (PollEvent(state, event)) {
+        std::visit(overloaded {
+            [&](const KeyEvent &ev) {
+                if (ev.key_down) {
+                    if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
+                        CloseWindow(state);
+                }
+            },
+            [](const auto &) {},
+        }, event);
+    }
+
+    BeginDrawing(state);
+
+    const auto size = GetBufferSize(state);
+    const Size max_size {.width = image.get_width(), .height = image.get_height()};
+
+    BeginScrollPane(state, scroll_pivot, {
+        .pos = {},
+        .min_size = size,
+        .max_size = max_size,
+        .scroll_bar = SCROLL_SLEEK,
+        .scroll_factor = 2,
+        .show_hscroll_bar = false,
+    }); {
+        for (size_t y = 0; y < image.get_height(); y++)
+            for (size_t x = 0; x < image.get_width(); x++)
+                SetCell(state, ' ', {.x = x, .y = y}, {.bg = Color::from_rgb(image(x, y))});
+    } EndPane(state);
+
+    EndDrawing(state);
+}
+
 int main() {
     auto &state = GetState();
     if (const auto result = Initialize(state); !result) {
-        std::cout << result.what() << std::endl;
+        std::cerr << result.what() << std::endl;
         return 1;
     }
 
-    Position scroll_pivot;
-
-    ImageView image = load_image("../res/horn of salvation.jpg");
-    // ImageView image = load_image("../res/musashi.png");
-    image = down_scale(image, 1, 3);
+    size_t align = 0;
 
     while (!ShouldWindowClose(state)) {
         Event event;
@@ -488,6 +506,8 @@ int main() {
                     if (ev.key_down) {
                         if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
                             CloseWindow(state);
+                        if (ev.key_code == KeyCode::ENTER && ev.modifiers == 0)
+                            align++;
                     }
                 },
                 [](const auto &) {},
@@ -495,24 +515,20 @@ int main() {
         }
 
         BeginDrawing(state);
-
         const auto size = GetBufferSize(state);
-        const Size max_size {.width = image.get_width(), .height = image.get_height()};
 
-        BeginScrollPane(state, scroll_pivot, {
-            .pos = {},
-            .min_size = size,
-            .max_size = max_size,
-            .scroll_factor = 2,
-        }); {
-            for (size_t y = 0; y < image.get_height(); y++)
-                for (size_t x = 0; x < image.get_width(); x++)
-                    SetCell(state, ' ', {.x = x, .y = y}, {.bg = Color::from_rgb(image(x, y))});
-        } EndPane(state);
+        TextBox(state, {
+            .text = "Hello, World\nThis is an example of multiline text\n \nThis is amazing\nPress Esc to quit, Enter to change alignment",
+            .size = size,
+            .align = static_cast<Align>(align % 9),
+        });
 
         EndDrawing(state);
     }
 
-    Cleanup();
+    if (const auto result = Cleanup(); !result) {
+        std::cerr << result.what() << std::endl;
+        return 1;
+    }
     return 0;
 }

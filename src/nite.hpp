@@ -158,6 +158,7 @@ namespace nite
         StyledChar top_left, top, top_right;
         StyledChar left, center, right;
         StyledChar bottom_left, bottom, bottom_right;
+        StyledChar left_joint, right_joint, top_joint, bottom_joint;
     };
 
     inline static const constexpr Border BORDER_DEFAULT = {
@@ -170,6 +171,45 @@ namespace nite
             {'+', {}},
             {'-', {}},
             {'+', {}},
+
+            {'+', {}},
+            {'+', {}},
+            {'+', {}},
+            {'+', {}},
+    };
+
+    inline static const constexpr Border BORDER_SLEEK = {
+            {L'┌', {}},
+            {L'─', {}},
+            {L'┐', {}},
+            {L'│', {}},
+            {L'┼', {}},
+            {L'│', {}},
+            {L'└', {}},
+            {L'─', {}},
+            {L'┘', {}},
+
+            {L'├', {}},
+            {L'┤', {}},
+            {L'┬', {}},
+            {L'┴', {}},
+    };
+
+    inline static const constexpr Border BORDER_CURVED = {
+            {L'╭', {}},
+            {L'─', {}},
+            {L'╮', {}},
+            {L'│', {}},
+            {L'┼', {}},
+            {L'│', {}},
+            {L'╰', {}},
+            {L'─', {}},
+            {L'╯', {}},
+
+            {L'├', {}},
+            {L'┤', {}},
+            {L'┬', {}},
+            {L'┴', {}},
     };
 
     struct ScrollBar {
@@ -188,6 +228,30 @@ namespace nite
             {'-', {}},
             {'*', {}},
             {'+', {}},
+    };
+
+    inline static const constexpr ScrollBar SCROLL_SLEEK = {
+            {L'●', {}},
+            {L'↑', {}},
+            {L'│', {}},
+            {L'░', {}},
+            {L'↓', {}},
+            {L'←', {}},
+            {L'─', {}},
+            {L'░', {}},
+            {L'→', {}},
+    };
+
+    enum class Align {
+        TOP_LEFT,
+        TOP,
+        TOP_RIGHT,
+        LEFT,
+        CENTER,
+        RIGHT,
+        BOTTOM_LEFT,
+        BOTTOM,
+        BOTTOM_RIGHT,
     };
 
     /**
@@ -436,15 +500,13 @@ namespace nite
     /**
      * Initializes the console and prepares all necessary components
      * @param state the console state to work on
-     * @return true if operation succeeded
-     * @return false if operation failed
+     * @return Result
      */
     Result Initialize(State &state);
     /**
      * Cleanups the console and restores the terminal state
      * @param state the console state to work on
-     * @return true if operation succeeded
-     * @return false if operation failed
+     * @return Result
      */
     Result Cleanup();
 
@@ -499,8 +561,26 @@ namespace nite
      * @param style the style of the cell
      */
     void SetCell(State &state, wchar_t value, const Position position, const Style style = {});
+    /**
+     * Sets the style of a specific cell on the console window
+     * @param state the console state to work on
+     * @param position the position of the cell
+     * @param style the style of the cell
+     */
     void SetCellStyle(State &state, const Position position, const Style style);
+    /**
+     * Sets the bg color of a specific cell on the console window
+     * @param state the console state to work on
+     * @param position the position of the cell
+     * @param style the bg color of the cell
+     */
     void SetCellBG(State &state, const Position position, const Color color);
+    /**
+     * Sets the fg color of a specific cell on the console window
+     * @param state the console state to work on
+     * @param position the position of the cell
+     * @param style the fg color of the cell
+     */
     void SetCellFG(State &state, const Position position, const Color color);
     /**
      * Fills a range of cells on the console window 
@@ -598,7 +678,8 @@ namespace nite
         Size max_size = {};
         ScrollBar scroll_bar = SCROLL_DEFAULT;
         float scroll_factor = 1.0f;
-        bool show_scroll_bar = true;
+        bool show_vscroll_bar = true;
+        bool show_hscroll_bar = true;
 
         Handler<ScrollPaneInfo> on_vscroll = {};
         Handler<ScrollPaneInfo> on_hscroll = {};
@@ -622,18 +703,6 @@ namespace nite
 
     void DrawBorder(State &state, const Border &border);
 
-    // enum class Align {
-    //     TOP_LEFT,
-    //     TOP,
-    //     TOP_RIGHT,
-    //     LEFT,
-    //     CENTER,
-    //     RIGHT,
-    //     BOTTOM_LEFT,
-    //     BOTTOM,
-    //     BOTTOM_RIGHT,
-    // };
-
     struct TextInfo {
         std::string text = {};
         Position pos = {};
@@ -656,6 +725,8 @@ namespace nite
         Position pos = {};
         Size size = {};
         Style style = {};
+        bool wrap = true;
+        Align align = Align::TOP_LEFT;
 
         Handler<TextBoxInfo> on_hover = {};
         Handler<TextBoxInfo> on_click = {};

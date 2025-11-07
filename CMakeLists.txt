@@ -21,11 +21,17 @@ add_executable (nite ${NITE_SRCS} ${NITE_INCLUDES})
 target_include_directories (nite PRIVATE src)
 
 if (MSVC)
-    # warning level 4
-    # target_compile_options (nite PRIVATE /W4)
+# warning level 4
+# target_compile_options (nite PRIVATE /W4)
 else ()
     # additional warnings
-    target_compile_options (nite PRIVATE -Wall -Wextra -Wunused-parameter)
+    target_compile_options (nite PRIVATE
+        -Wall 
+        -Wextra 
+        -Wunused 
+        -Wunused-parameter 
+        -march=native
+    )
 endif ()
 
 # Add tests and install targets if needed.
