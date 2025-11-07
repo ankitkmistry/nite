@@ -173,6 +173,7 @@ namespace nite
         };
 
         class ScrollBox : public Box {
+            bool scroll_home;
             bool hscroll_bar;
             bool vscroll_bar;
             ScrollBar scroll_style;
@@ -183,10 +184,11 @@ namespace nite
 
           public:
             ScrollBox(
-                    bool show_hscroll_bar, bool show_vscroll_bar, const ScrollBar &scroll_style, const Position pos, const Position pivot,
-                    const Size min_size, const Size max_size
+                    bool show_scroll_home, bool show_hscroll_bar, bool show_vscroll_bar, const ScrollBar &scroll_style, const Position pos,
+                    const Position pivot, const Size min_size, const Size max_size
             )
-                : hscroll_bar(show_hscroll_bar),
+                : scroll_home(show_scroll_home),
+                  hscroll_bar(show_hscroll_bar),
                   vscroll_bar(show_vscroll_bar),
                   scroll_style(scroll_style),
                   pos(pos),
@@ -196,6 +198,10 @@ namespace nite
 
             ScrollBox() = default;
             ~ScrollBox() = default;
+
+            bool show_scroll_home() const {
+                return scroll_home;
+            }
 
             bool show_hscroll_bar() const {
                 return hscroll_bar;
@@ -720,8 +726,8 @@ namespace nite
 
         state.impl->selected_stack.push(
                 std::make_unique<internal::ScrollBox>(
-                        info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos, pivot,
-                        info.min_size, info.max_size
+                        info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar,
+                        state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
                 )
         );
     }
@@ -782,6 +788,11 @@ namespace nite
             const auto min_size = scroll_box->get_min_size();
             const auto pivot = scroll_box->get_pivot();
 
+            // Scroll home button
+            if (scroll_box->show_scroll_home()) {
+                const auto home_cell = Position{.col = min_size.width - 1, .row = min_size.height - 1} + pivot;
+                SetCell(state, scroll.home.value, home_cell, scroll.home.style);
+            }
             // Vertical scroll
             if (scroll_box->show_vscroll_bar() && min_size.height != max_size.height) {
                 const auto vscroll_start = Position{.col = min_size.width - 1, .row = 1} + pivot;
@@ -798,9 +809,6 @@ namespace nite
                 const size_t max_row = (double) (max_size.height - min_size.height - 1) / max_size.height * (vscroll_end.row - vscroll_start.row);
                 const size_t node_height = (vscroll_end.row - vscroll_start.row) - max_row;
                 DrawLine(state, node_start, {.col = node_start.col, .row = node_start.row + node_height}, scroll.v_node.value, scroll.v_node.style);
-
-                const auto home_cell = Position{.col = min_size.width - 1, .row = min_size.height - 1} + pivot;
-                SetCell(state, scroll.home.value, home_cell, scroll.home.style);
             }
             // Horizontal scroll
             if (scroll_box->show_hscroll_bar() && min_size.width != max_size.width) {

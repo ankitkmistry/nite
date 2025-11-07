@@ -178,7 +178,7 @@ namespace nite
             {'+', {}},
     };
 
-    inline static const constexpr Border BORDER_SLEEK = {
+    inline static const constexpr Border BORDER_LIGHT = {
             {L'┌', {}},
             {L'─', {}},
             {L'┐', {}},
@@ -195,7 +195,143 @@ namespace nite
             {L'┴', {}},
     };
 
-    inline static const constexpr Border BORDER_CURVED = {
+    inline static const constexpr Border BORDER_HEAVY = {
+            {L'┏', {}},
+            {L'━', {}},
+            {L'┓', {}},
+            {L'┃', {}},
+            {L'╋', {}},
+            {L'┃', {}},
+            {L'┗', {}},
+            {L'━', {}},
+            {L'┛', {}},
+
+            {L'┣', {}},
+            {L'┫', {}},
+            {L'┳', {}},
+            {L'┻', {}},
+    };
+
+    inline static const constexpr Border BORDER_LIGHT_DASHED2 = {
+            {L'┌', {}},
+            {L'╌', {}},
+            {L'┐', {}},
+            {L'╎', {}},
+            {L'┼', {}},
+            {L'╎', {}},
+            {L'└', {}},
+            {L'╌', {}},
+            {L'┘', {}},
+
+            {L'├', {}},
+            {L'┤', {}},
+            {L'┬', {}},
+            {L'┴', {}},
+    };
+
+    inline static const constexpr Border BORDER_LIGHT_DASHED3 = {
+            {L'┌', {}},
+            {L'┄', {}},
+            {L'┐', {}},
+            {L'┆', {}},
+            {L'┼', {}},
+            {L'┆', {}},
+            {L'└', {}},
+            {L'┄', {}},
+            {L'┘', {}},
+
+            {L'├', {}},
+            {L'┤', {}},
+            {L'┬', {}},
+            {L'┴', {}},
+    };
+
+    inline static const constexpr Border BORDER_LIGHT_DASHED4 = {
+            {L'┌', {}},
+            {L'┈', {}},
+            {L'┐', {}},
+            {L'┊', {}},
+            {L'┼', {}},
+            {L'┊', {}},
+            {L'└', {}},
+            {L'┈', {}},
+            {L'┘', {}},
+
+            {L'├', {}},
+            {L'┤', {}},
+            {L'┬', {}},
+            {L'┴', {}},
+    };
+
+    inline static const constexpr Border BORDER_HEAVY_DASHED2 = {
+            {L'┏', {}},
+            {L'╍', {}},
+            {L'┓', {}},
+            {L'╏', {}},
+            {L'╋', {}},
+            {L'╏', {}},
+            {L'┗', {}},
+            {L'╍', {}},
+            {L'┛', {}},
+
+            {L'┣', {}},
+            {L'┫', {}},
+            {L'┳', {}},
+            {L'┻', {}},
+    };
+
+    inline static const constexpr Border BORDER_HEAVY_DASHED3 = {
+            {L'┏', {}},
+            {L'┅', {}},
+            {L'┓', {}},
+            {L'┇', {}},
+            {L'╋', {}},
+            {L'┇', {}},
+            {L'┗', {}},
+            {L'┅', {}},
+            {L'┛', {}},
+
+            {L'┣', {}},
+            {L'┫', {}},
+            {L'┳', {}},
+            {L'┻', {}},
+    };
+
+    inline static const constexpr Border BORDER_HEAVY_DASHED4 = {
+            {L'┏', {}},
+            {L'┉', {}},
+            {L'┓', {}},
+            {L'┋', {}},
+            {L'╋', {}},
+            {L'┋', {}},
+            {L'┗', {}},
+            {L'┉', {}},
+            {L'┛', {}},
+
+            {L'┣', {}},
+            {L'┫', {}},
+            {L'┳', {}},
+            {L'┻', {}},
+    };
+
+    inline static const constexpr Border BORDER_DOUBLE = {
+            {L'╔', {}},
+            {L'═', {}},
+            {L'╗', {}},
+            {L'║', {}},
+            {L'┼', {}},
+            {L'║', {}},
+            {L'╚', {}},
+            {L'═', {}},
+            {L'╝', {}},
+
+            {L'╠', {}},
+            {L'╣', {}},
+            {L'╦', {}},
+            {L'╩', {}},
+    };
+
+    inline static const constexpr Border BORDER_ROUNDED = {
             {L'╭', {}},
             {L'─', {}},
             {L'╮', {}},
@@ -230,7 +366,7 @@ namespace nite
             {'+', {}},
     };
 
-    inline static const constexpr ScrollBar SCROLL_SLEEK = {
+    inline static const constexpr ScrollBar SCROLL_LIGHT = {
             {L'●', {}},
             {L'↑', {}},
             {L'│', {}},
@@ -240,6 +376,30 @@ namespace nite
             {L'─', {}},
             {L'░', {}},
             {L'→', {}},
+    };
+
+    inline static const constexpr ScrollBar SCROLL_DASHED = {
+            {L'●', {}},
+            {L'⇡', {}},
+            {L'╎', {}},
+            {L'░', {}},
+            {L'⇣', {}},
+            {L'⇠', {}},
+            {L'╌', {}},
+            {L'░', {}},
+            {L'⇢', {}},
+    };
+
+    inline static const constexpr ScrollBar SCROLL_DOUBLE = {
+            {L'●', {}},
+            {L'⇑', {}},
+            {L'║', {}},
+            {L'░', {}},
+            {L'⇓', {}},
+            {L'⇐', {}},
+            {L'═', {}},
+            {L'░', {}},
+            {L'⇒', {}},
     };
 
     enum class Align {
@@ -680,6 +840,7 @@ namespace nite
         float scroll_factor = 1.0f;
         bool show_vscroll_bar = true;
         bool show_hscroll_bar = true;
+        bool show_scroll_home = true;
 
         Handler<ScrollPaneInfo> on_vscroll = {};
         Handler<ScrollPaneInfo> on_hscroll = {};

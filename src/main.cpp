@@ -477,7 +477,7 @@ void image_test(State &state) {
         .pos = {},
         .min_size = size,
         .max_size = max_size,
-        .scroll_bar = SCROLL_SLEEK,
+        .scroll_bar = SCROLL_LIGHT,
         .scroll_factor = 2,
         .show_hscroll_bar = false,
     }); {
