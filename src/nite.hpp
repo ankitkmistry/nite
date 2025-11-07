@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
@@ -69,7 +70,7 @@ namespace nite
             };
         }
 
-        constexpr Color inverse() const {
+        constexpr Color invert() const {
             return Color{.r = static_cast<uint8_t>(255 - r), .g = static_cast<uint8_t>(255 - g), .b = static_cast<uint8_t>(255 - b)};
         }
 
@@ -118,8 +119,8 @@ namespace nite
             return Style{.bg = fg, .fg = bg, .mode = mode};
         }
 
-        constexpr Style inverse() const {
-            return Style{.bg = bg.inverse(), .fg = fg.inverse(), .mode = mode};
+        constexpr Style invert() const {
+            return Style{.bg = bg.invert(), .fg = fg.invert(), .mode = mode};
         }
 
         constexpr bool operator==(const Style &other) const {
@@ -898,6 +899,56 @@ namespace nite
     };
 
     void TextBox(State &state, TextBoxInfo info);
+
+    // TODO: find a better way to describe progress bar motion
+
+    inline static constexpr std::array<StyledChar, 1> DEFAULT_MOTION = {
+            StyledChar{L'█', {}},
+    };
+
+    inline static constexpr std::array<StyledChar, 8> SLEEK_MOTION = {
+            StyledChar{L'▏', {}},
+            StyledChar{L'▎', {}},
+            StyledChar{L'▍', {}},
+            StyledChar{L'▌', {}},
+            StyledChar{L'▋', {}},
+            StyledChar{L'▊', {}},
+            StyledChar{L'▉', {}},
+            StyledChar{L'█', {}},
+    };
+
+    // template<size_t N>
+    // struct PBMotion {
+    //     std::array<StyledChar, N> top_down;
+    //     std::array<StyledChar, N> down_top;
+    //     std::array<StyledChar, N> left_right;
+    //     std::array<StyledChar, N> right_left;
+    // };
+
+    // enum class PBDirection {
+    //     TOP_DOWN,
+    //     DOWN_TOP,
+    //     LEFT_RIGHT,
+    //     RIGHT_LEFT,
+    // };
+
+    // TODO: implement all other progress bar motions
+
+    struct ProgressBarInfo {
+        /// value is from [0, 1]
+        double value = 0.0f;
+        Position pos = {};
+        size_t length = 0;
+        std::vector<StyledChar> motion = {DEFAULT_MOTION.begin(), DEFAULT_MOTION.end()};
+        Style style = {};
+
+        Handler<ProgressBarInfo> on_hover = {};
+        Handler<ProgressBarInfo> on_click = {};
+        Handler<ProgressBarInfo> on_click2 = {};
+        Handler<ProgressBarInfo> on_menu = {};
+    };
+
+    void ProgressBar(State &state, ProgressBarInfo info);
 }    // namespace nite
 
 // --------------------------------

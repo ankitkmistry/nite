@@ -868,11 +868,6 @@ namespace nite
     }
 
     void Text(State &state, TextInfo info) {
-        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
-            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
-            return;
-        }
-
         if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1})
                     .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
@@ -1077,6 +1072,46 @@ namespace nite
         }
 
         EndPane(state);
+    }
+
+    void ProgressBar(State &state, ProgressBarInfo info) {
+        if (internal::StaticBox(info.pos, Size{.width = info.length, .height = 1})
+                    .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
+            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
+                if (info.on_click)
+                    while (count--)
+                        info.on_click(std::forward<ProgressBarInfo &>(info));
+            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
+                if (info.on_menu)
+                    while (count--)
+                        info.on_menu(std::forward<ProgressBarInfo &>(info));
+            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
+                if (info.on_click2)
+                    while (count--)
+                        info.on_click2(std::forward<ProgressBarInfo &>(info));
+            } else if (info.on_hover)
+                info.on_hover(std::forward<ProgressBarInfo &>(info));
+        }
+
+        double value = info.value;
+        if (value < 0)
+            value = 0;
+        if (value > 1)
+            value = 1;
+
+        size_t req = value * (info.length * info.motion.size());
+        size_t col = 0;
+        while (req > 0) {
+            if (req >= info.motion.size()) {
+                state.impl->set_cell(info.pos.col + col, info.pos.row, info.motion.back().value, info.motion.back().style);
+                req -= info.motion.size();
+                col++;
+            } else {
+                state.impl->set_cell(info.pos.col + col, info.pos.row, info.motion[req - 1].value, info.motion[req - 1].style);
+                req = 0;
+                col++;
+            }
+        }
     }
 
     template<class... Ts>

@@ -453,7 +453,7 @@ int main1() {
 void image_test(State &state) {
     static Position scroll_pivot;
     static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 6, 10);
-    // static ImageView image = down_scale(load_image("../res/musashi.png"), 6, 10);
+    // static ImageView image = down_scale(load_image("../res/musashi.jpg"), 6, 10);
 
     Event event;
     while (PollEvent(state, event)) {
@@ -497,6 +497,7 @@ int main() {
     }
 
     size_t align = 0;
+    double value = 0;
 
     while (!ShouldWindowClose(state)) {
         Event event;
@@ -514,6 +515,10 @@ int main() {
             }, event);
         }
 
+        if (value > 1)
+            value = 0;
+        value += GetDeltaTime(state) / 2;
+
         BeginDrawing(state);
         const auto size = GetBufferSize(state);
 
@@ -526,6 +531,13 @@ int main() {
         // DrawVDivider(state, size.width / 2);
         // DrawHDivider(state, size.height / 2);
         // SetCell(state, BORDER_SLEEK.center.value, {.col = size.width / 2, .row = size.height / 2});
+
+        ProgressBar(state, {
+            .value = value,
+            .pos = {.col = 0, .row = size.height / 2},
+            .length = size.width,
+            .motion = {SLEEK_MOTION.begin(), SLEEK_MOTION.end()},
+        });
 
         EndDrawing(state);
     }
