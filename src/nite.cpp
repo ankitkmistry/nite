@@ -846,7 +846,7 @@ namespace nite
         state.impl->selected_stack.pop();
     }
 
-    void DrawBorder(State &state, const Border &border) {
+    void DrawBorder(State &state, const BoxBorder &border) {
         const internal::Box &selected = state.impl->get_selected();
 
         if (border.top_left.value != '\0')
@@ -1132,7 +1132,7 @@ namespace nite
             state.impl->set_cell(info.pos.col + col, info.pos.row, ' ', info.style);
     }
 
-    void SimpleTable(State &state, SimpleTableInfo info) {
+    Size SimpleTable(State &state, SimpleTableInfo info) {
         Style header_style1 = info.header_style;
         Style header_style2;
         header_style2.bg = Color::from_hex(saturated_add(header_style1.bg.get_hex(), 0x151515u));
@@ -1150,24 +1150,120 @@ namespace nite
         for (size_t col = 0; col < info.num_cols; col++) {
             size_t max = 0;
             for (size_t row = 0; row < info.num_rows; row++) {
-                const auto &cell_text = info.data[row * info.num_cols + col];
+                const auto &cell_text = (row * info.num_cols + col) >= info.data.size() ? "" : info.data[row * info.num_cols + col];
                 if (cell_text.size() + 1 >= max)
                     max = cell_text.size() + 1;
             }
             total_width += max_col_widths[col] = max;
         }
 
-        Size size = {.width = total_width, .height = info.num_rows};
-        BeginPane(state, info.pos, size);
 
-        if (info.show_border)
-            ;    // TODO: implement this
-        else {
+        if (info.show_border) {
+            // Data:
+            //  | a   | b    | c     |
+            //  | a   | b    | c     |
+            //  | a   | b    | c     |
+            //  | a   | b    | c     |
+            //
+            //  Output:
+            //
+            //  +-----+------+-------+
+            //  | a   | b    | c     |
+            //  +-----+------+-------+
+            //  | a   | b    | c     |
+            //  | a   | b    | c     |
+            //  | a   | b    | c     |
+            //  +-----+------+-------+
+            //
+            Size size;
+            if (info.include_header_row)
+                size = {.width = total_width + max_col_widths.size() + 1, .height = info.num_rows + 3};
+            else
+                size = {.width = total_width + max_col_widths.size() + 1, .height = info.num_rows + 2};
+
+            BeginPane(state, info.pos, size);
+            {
+                const auto last_row = info.include_header_row ? info.num_rows + 2 : info.num_rows + 1;
+
+                state.impl->set_cell(0, 0, info.border.top_left.value, info.border.top_left.style);
+                if (info.include_header_row)
+                    state.impl->set_cell(0, 2, info.border.left_joint.value, info.border.left_joint.style);
+                state.impl->set_cell(0, last_row, info.border.bottom_left.value, info.border.bottom_left.style);
+
+                size_t col = 1;
+                for (const size_t col_width: max_col_widths) {
+                    DrawLine(
+                            state, {.col = col, .row = 0}, {.col = col + col_width, .row = 0}, info.border.horizontal.value,
+                            info.border.horizontal.style
+                    );
+                    state.impl->set_cell(col + col_width, 0, info.border.top_joint.value, info.border.top_joint.style);
+
+                    if (info.include_header_row) {
+                        DrawLine(
+                                state, {.col = col, .row = 2}, {.col = col + col_width, .row = 2}, info.border.horizontal.value,
+                                info.border.horizontal.style
+                        );
+                        state.impl->set_cell(col + col_width, 2, info.border.center_joint.value, info.border.center_joint.style);
+                    }
+
+                    DrawLine(
+                            state, {.col = col, .row = last_row}, {.col = col + col_width, .row = last_row}, info.border.horizontal.value,
+                            info.border.horizontal.style
+                    );
+                    state.impl->set_cell(col + col_width, last_row, info.border.bottom_joint.value, info.border.bottom_joint.style);
+
+                    col += col_width + 1;
+                }
+                col--;
+                state.impl->set_cell(col, 0, info.border.top_right.value, info.border.top_right.style);
+                if (info.include_header_row)
+                    state.impl->set_cell(col, 2, info.border.right_joint.value, info.border.right_joint.style);
+                state.impl->set_cell(col, last_row, info.border.bottom_right.value, info.border.bottom_right.style);
+            }
+
+            size_t y = 1;
+            for (size_t row = 0; row < info.num_rows; row++) {
+                state.impl->set_cell(0, y, info.border.vertical.value, info.border.vertical.style);
+                size_t x = 1;
+                for (size_t col = 0; col < info.num_cols; col++) {
+                    const auto &cell_text = (row * info.num_cols + col) >= info.data.size() ? "" : info.data[row * info.num_cols + col];
+                    Style style;
+                    if (info.include_header_row) {
+                        if (row == 0)
+                            style = col % 2 == 0 ? header_style2 : header_style1;
+                        else
+                            style = (row + col) % 2 == 0 ? table_style2 : table_style1;
+                    } else
+                        style = (row + col) % 2 == 0 ? table_style2 : table_style1;
+                    // clang-format off
+                    TextBox(state, {
+                        .text = cell_text,
+                        .pos = {.x = x, .y = y},
+                        .size = {.width = max_col_widths[col], .height = 1},
+                        .style = style,
+                    });
+                    // clang-format on
+                    x += max_col_widths[col];
+                    // Place the separaator
+                    state.impl->set_cell(x, y, info.border.vertical.value, info.border.vertical.style);
+                    x++;
+                }
+                // Make space for header row
+                if (y == 1 && info.include_header_row)
+                    y = 3;
+                else
+                    y++;
+            }
+            EndPane(state);
+            return size;
+        } else {
+            Size size = {.width = total_width, .height = info.num_rows};
+            BeginPane(state, info.pos, size);
             size_t y = 0;
             for (size_t row = 0; row < info.num_rows; row++) {
                 size_t x = 0;
                 for (size_t col = 0; col < info.num_cols; col++) {
-                    const auto &cell_text = info.data[row * info.num_cols + col];
+                    const auto &cell_text = (row * info.num_cols + col) >= info.data.size() ? "" : info.data[row * info.num_cols + col];
                     Style style;
                     if (info.include_header_row) {
                         if (row == 0)
@@ -1188,9 +1284,9 @@ namespace nite
                 }
                 y++;
             }
+            EndPane(state);
+            return size;
         }
-
-        EndPane(state);
     }
 
     template<class... Ts>

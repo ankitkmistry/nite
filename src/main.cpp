@@ -549,6 +549,10 @@ int main() {
         return 1;
     }
 
+    bool header = false;
+    bool border = false;
+    bool color = false;
+
     while (!ShouldWindowClose(state)) {
         Event event;
         while (PollEvent(state, event)) {
@@ -557,6 +561,12 @@ int main() {
                     if (ev.key_down) {
                         if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
                             CloseWindow(state);
+                        if (ev.key_code == KeyCode::K_H && ev.modifiers == 0)
+                            header = !header;
+                        if (ev.key_code == KeyCode::K_B && ev.modifiers == 0)
+                            border = !border;
+                        if (ev.key_code == KeyCode::K_C && ev.modifiers == 0)
+                            color = !color;
                     }
                 },
                 [](const auto &) {},
@@ -566,16 +576,19 @@ int main() {
         BeginDrawing(state);
         SimpleTable(state, {
             .data = {
-                "First name",   "Last name",
-                "Ankit",        "Kumar Mistry",
-                "Ajit",         "Kumar Mistry",
-                "Nandita",      "Mistry",
-                "Aashita",      "Mistry",
+                "Name",	        "Telephone",	"Email",	            "Office",
+                "Dr. Sally",	"555-1234",	    "sally@calpoly.edu",	"12-34",
+                "Dr. Steve",	"555-5678",	    "steve@calpoly.edu",	"56-78",
+                "Dr. Kathy",	"555-9012",	    "kathy@calpoly.edu",	"90-123",
             },
-            .include_header_row = true,
-            .num_cols = 2,
-            .num_rows = 5,
+            .include_header_row = header,
+            .num_cols = 4,
+            .num_rows = 4,
             .pos = {},
+            .header_style = color ? Style{.bg = COLOR_TEAL, .fg = COLOR_WHITE, .mode = STYLE_BOLD} : Style{.mode = STYLE_BOLD},
+            .table_style = color ? Style{.bg = COLOR_NAVY, .fg = COLOR_SILVER} : Style{},
+            .show_border = border,
+            .border = TABLE_BORDER_LIGHT,
         });
         EndDrawing(state);
     }

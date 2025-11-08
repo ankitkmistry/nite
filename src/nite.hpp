@@ -141,212 +141,289 @@ namespace nite
         Style style = {};
     };
 
-    /**
-     * Represents the border information.
-     *     
-     * Border is represented in the following way:
-     * 
-     * +----------------+---------+-----------------+
-     * | top_left       | top     | top_right       |
-     * +----------------+---------+-----------------+
-     * | left           | center  | right           |
-     * +----------------+---------+-----------------+
-     * | bottom_left    | bottom  | bottom_right    |
-     * +----------------+---------+-----------------+
-     *
-     * For example:
-     *  + - +
-     *  | + |
-     *  + - +
-     */
-    struct Border {
+    struct BoxBorder {
         StyledChar top_left, top, top_right;
-        StyledChar left, center, right;
+        StyledChar left, right;
         StyledChar bottom_left, bottom, bottom_right;
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_DEFAULT = {
+            {'+', {}},
+            {'-', {}},
+            {'+', {}},
+            {'|', {}},
+            {'|', {}},
+            {'+', {}},
+            {'-', {}},
+            {'+', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_LIGHT = {
+            {L'┌', {}},
+            {L'─', {}},
+            {L'┐', {}},
+            {L'│', {}},
+            {L'│', {}},
+            {L'└', {}},
+            {L'─', {}},
+            {L'┘', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_HEAVY = {
+            {L'┏', {}},
+            {L'━', {}},
+            {L'┓', {}},
+            {L'┃', {}},
+            {L'┃', {}},
+            {L'┗', {}},
+            {L'━', {}},
+            {L'┛', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_LIGHT_DASHED2 = {
+        {L'┌', {}},
+        {L'╌', {}},
+        {L'┐', {}},
+        {L'╎', {}},
+        {L'╎', {}},
+        {L'└', {}},
+        {L'╌', {}},
+        {L'┘', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_LIGHT_DASHED3 = {
+        {L'┌', {}},
+        {L'┄', {}},
+        {L'┐', {}},
+        {L'┆', {}},
+        {L'┆', {}},
+        {L'└', {}},
+        {L'┄', {}},
+        {L'┘', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_LIGHT_DASHED4 = {
+        {L'┌', {}},
+        {L'┈', {}},
+        {L'┐', {}},
+        {L'┊', {}},
+        {L'┊', {}},
+        {L'└', {}},
+        {L'┈', {}},
+        {L'┘', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_HEAVY_DASHED2 = {
+        {L'┏', {}},
+        {L'╍', {}},
+        {L'┓', {}},
+        {L'╏', {}},
+        {L'╏', {}},
+        {L'┗', {}},
+        {L'╍', {}},
+        {L'┛', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_HEAVY_DASHED3 = {
+        {L'┏', {}},
+        {L'┅', {}},
+        {L'┓', {}},
+        {L'┇', {}},
+        {L'┇', {}},
+        {L'┗', {}},
+        {L'┅', {}},
+        {L'┛', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_HEAVY_DASHED4 = {
+        {L'┏', {}},
+        {L'┉', {}},
+        {L'┓', {}},
+        {L'┋', {}},
+        {L'┋', {}},
+        {L'┗', {}},
+        {L'┉', {}},
+        {L'┛', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_DOUBLE = {
+        {L'╔', {}},
+        {L'═', {}},
+        {L'╗', {}},
+        {L'║', {}},
+        {L'║', {}},
+        {L'╚', {}},
+        {L'═', {}},
+        {L'╝', {}},
+    };
+
+    inline static const constexpr BoxBorder BOX_BORDER_ROUNDED = {
+        {L'╭', {}},
+        {L'─', {}},
+        {L'╮', {}},
+        {L'│', {}},
+        {L'│', {}},
+        {L'╰', {}},
+        {L'─', {}},
+        {L'╯', {}},
+    };
+
+    struct TableBorder {
+        StyledChar vertical, horizontal;
+        StyledChar top_left, top_right;
+        StyledChar bottom_left, bottom_right;
+        StyledChar center_joint;
         StyledChar left_joint, right_joint, top_joint, bottom_joint;
     };
 
-    inline static const constexpr Border BORDER_DEFAULT = {
-            {'+', {}},
+    inline static const constexpr TableBorder TABLE_BORDER_DEFAULT = {
+            {'|', {}},
             {'-', {}},
             {'+', {}},
-            {'|', {}},
             {'+', {}},
-            {'|', {}},
             {'+', {}},
-            {'-', {}},
             {'+', {}},
-
+            {'+', {}},
             {'+', {}},
             {'+', {}},
             {'+', {}},
             {'+', {}},
     };
 
-    inline static const constexpr Border BORDER_LIGHT = {
-            {L'┌', {}},
-            {L'─', {}},
-            {L'┐', {}},
+    inline static const constexpr TableBorder TABLE_BORDER_LIGHT = {
             {L'│', {}},
-            {L'┼', {}},
-            {L'│', {}},
-            {L'└', {}},
             {L'─', {}},
+            {L'┌', {}},
+            {L'┐', {}},
+            {L'└', {}},
             {L'┘', {}},
-
+            {L'┼', {}},
             {L'├', {}},
             {L'┤', {}},
             {L'┬', {}},
             {L'┴', {}},
     };
 
-    inline static const constexpr Border BORDER_HEAVY = {
-            {L'┏', {}},
-            {L'━', {}},
-            {L'┓', {}},
+    inline static const constexpr TableBorder TABLE_BORDER_HEAVY = {
             {L'┃', {}},
-            {L'╋', {}},
-            {L'┃', {}},
-            {L'┗', {}},
             {L'━', {}},
+            {L'┏', {}},
+            {L'┓', {}},
+            {L'┗', {}},
             {L'┛', {}},
-
+            {L'╋', {}},
             {L'┣', {}},
             {L'┫', {}},
             {L'┳', {}},
             {L'┻', {}},
     };
 
-    inline static const constexpr Border BORDER_LIGHT_DASHED2 = {
-            {L'┌', {}},
-            {L'╌', {}},
-            {L'┐', {}},
+    inline static const constexpr TableBorder TABLE_BORDER_LIGHT_DASHED2 = {
             {L'╎', {}},
-            {L'┼', {}},
-            {L'╎', {}},
-            {L'└', {}},
             {L'╌', {}},
-            {L'┘', {}},
-
-            {L'├', {}},
-            {L'┤', {}},
-            {L'┬', {}},
-            {L'┴', {}},
-    };
-
-    inline static const constexpr Border BORDER_LIGHT_DASHED3 = {
             {L'┌', {}},
-            {L'┄', {}},
             {L'┐', {}},
-            {L'┆', {}},
-            {L'┼', {}},
-            {L'┆', {}},
             {L'└', {}},
-            {L'┄', {}},
             {L'┘', {}},
-
+            {L'┼', {}},
             {L'├', {}},
             {L'┤', {}},
             {L'┬', {}},
             {L'┴', {}},
     };
 
-    inline static const constexpr Border BORDER_LIGHT_DASHED4 = {
+    inline static const constexpr TableBorder TABLE_BORDER_LIGHT_DASHED3 = {
+            {L'┆', {}},
+            {L'┄', {}},
             {L'┌', {}},
-            {L'┈', {}},
             {L'┐', {}},
-            {L'┊', {}},
-            {L'┼', {}},
-            {L'┊', {}},
             {L'└', {}},
-            {L'┈', {}},
             {L'┘', {}},
-
+            {L'┼', {}},
             {L'├', {}},
             {L'┤', {}},
             {L'┬', {}},
             {L'┴', {}},
     };
 
-    inline static const constexpr Border BORDER_HEAVY_DASHED2 = {
-            {L'┏', {}},
-            {L'╍', {}},
-            {L'┓', {}},
+    inline static const constexpr TableBorder TABLE_BORDER_LIGHT_DASHED4 = {
+            {L'┊', {}},
+            {L'┈', {}},
+            {L'┌', {}},
+            {L'┐', {}},
+            {L'└', {}},
+            {L'┘', {}},
+            {L'┼', {}},
+            {L'├', {}},
+            {L'┤', {}},
+            {L'┬', {}},
+            {L'┴', {}},
+    };
+
+    inline static const constexpr TableBorder TABLE_BORDER_HEAVY_DASHED2 = {
             {L'╏', {}},
-            {L'╋', {}},
-            {L'╏', {}},
-            {L'┗', {}},
             {L'╍', {}},
-            {L'┛', {}},
-
-            {L'┣', {}},
-            {L'┫', {}},
-            {L'┳', {}},
-            {L'┻', {}},
-    };
-
-    inline static const constexpr Border BORDER_HEAVY_DASHED3 = {
             {L'┏', {}},
-            {L'┅', {}},
             {L'┓', {}},
-            {L'┇', {}},
-            {L'╋', {}},
-            {L'┇', {}},
             {L'┗', {}},
-            {L'┅', {}},
             {L'┛', {}},
-
+            {L'╋', {}},
             {L'┣', {}},
             {L'┫', {}},
             {L'┳', {}},
             {L'┻', {}},
     };
 
-    inline static const constexpr Border BORDER_HEAVY_DASHED4 = {
+    inline static const constexpr TableBorder TABLE_BORDER_HEAVY_DASHED3 = {
+            {L'┇', {}},
+            {L'┅', {}},
             {L'┏', {}},
-            {L'┉', {}},
             {L'┓', {}},
-            {L'┋', {}},
-            {L'╋', {}},
-            {L'┋', {}},
             {L'┗', {}},
-            {L'┉', {}},
             {L'┛', {}},
-
+            {L'╋', {}},
             {L'┣', {}},
             {L'┫', {}},
             {L'┳', {}},
             {L'┻', {}},
     };
 
-    inline static const constexpr Border BORDER_DOUBLE = {
+    inline static const constexpr TableBorder TABLE_BORDER_HEAVY_DASHED4 = {
+            {L'┋', {}},
+            {L'┉', {}},
+            {L'┏', {}},
+            {L'┓', {}},
+            {L'┗', {}},
+            {L'┛', {}},
+            {L'╋', {}},
+            {L'┣', {}},
+            {L'┫', {}},
+            {L'┳', {}},
+            {L'┻', {}},
+    };
+
+    inline static const constexpr TableBorder TABLE_BORDER_DOUBLE = {
+            {L'║', {}},
+            {L'═', {}},
             {L'╔', {}},
-            {L'═', {}},
             {L'╗', {}},
-            {L'║', {}},
-            {L'┼', {}},
-            {L'║', {}},
             {L'╚', {}},
-            {L'═', {}},
             {L'╝', {}},
-
+            {L'╬', {}},
             {L'╠', {}},
             {L'╣', {}},
             {L'╦', {}},
             {L'╩', {}},
     };
 
-    inline static const constexpr Border BORDER_ROUNDED = {
+    inline static const constexpr TableBorder TABLE_BORDER_ROUNDED = {
+            {L'│', {}},
+            {L'─', {}},
             {L'╭', {}},
-            {L'─', {}},
             {L'╮', {}},
-            {L'│', {}},
-            {L'┼', {}},
-            {L'│', {}},
             {L'╰', {}},
-            {L'─', {}},
             {L'╯', {}},
-
+            {L'┼', {}},
             {L'├', {}},
             {L'┤', {}},
             {L'┬', {}},
@@ -867,7 +944,7 @@ namespace nite
 
     void EndPane(State &state);
 
-    void DrawBorder(State &state, const Border &border = BORDER_DEFAULT);
+    void DrawBorder(State &state, const BoxBorder &border = BOX_BORDER_DEFAULT);
     void DrawHDivider(State &state, size_t row, wchar_t fill = L'─', Style style = {});
     void DrawVDivider(State &state, size_t col, wchar_t fill = L'│', Style style = {});
 
@@ -961,14 +1038,21 @@ namespace nite
         size_t num_rows = 0;
 
         Position pos;
-        Style header_style = {.bg = COLOR_TEAL, .fg = COLOR_WHITE, .mode = STYLE_BOLD};
-        Style table_style = {.bg = COLOR_NAVY, .fg = COLOR_SILVER};
+        Style header_style = {.mode = STYLE_BOLD};
+        Style table_style = {};
 
         bool show_border = false;
-        Border border = BORDER_DEFAULT;
+        TableBorder border = TABLE_BORDER_DEFAULT;
     };
 
-    void SimpleTable(State &state, SimpleTableInfo info);
+    /**
+     * Draws a simple table on the screen and returns the size of the table
+     * 
+     * @param state the console state to work on
+     * @param info the info describing the table
+     * @return Size 
+     */
+    Size SimpleTable(State &state, SimpleTableInfo info);
 }    // namespace nite
 
 // --------------------------------
