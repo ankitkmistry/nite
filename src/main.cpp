@@ -522,7 +522,7 @@ void align_test(State &state) {
     const auto size = GetBufferSize(state);
 
     TextBox(state, {
-        .text = "Hello, World\nThis is an example of multiline text\nThis is amazing\n \nPress Esc to quit, Enter to change alignment",
+        .text = "Hello, World\nThis is an example of multiline text\nThis is amazing\n\nPress Esc to quit, Enter to change alignment",
         .size = size,
         .align = static_cast<Align>(align % 9),
     });
@@ -542,7 +542,51 @@ void align_test(State &state) {
     EndDrawing(state);
 }
 
+// clang-format on
+
 int main() {
+    auto &state = GetState();
+    Initialize(state);
+
+    size_t align = 0;
+    TextInputState text_state;
+
+    while (!ShouldWindowClose(state)) {
+        Event event;
+        while (PollEvent(state, event)) {
+            text_state.capture_event(event);
+
+            HandleEvent(event, [&](const KeyEvent &ev) {
+                if (ev.key_down && ev.modifiers == 0) {
+                    if (ev.key_code == KeyCode::ESCAPE)
+                        CloseWindow(state);
+                    if (ev.key_code == KeyCode::ENTER)
+                        align++;
+                }
+            });
+        }
+
+        BeginDrawing(state);
+
+        TextInput(
+                state, text_state,
+                {
+                        .pos = {.col = 0, .row = 0},
+                        .size = GetPaneSize(state),
+                        .align = static_cast<Align>(align % 9),
+        }
+        );
+
+        EndDrawing(state);
+    }
+
+    Cleanup();
+    return 0;
+}
+
+// clang-format off
+
+int main2() {
     auto &state = GetState();
     if (const auto result = Initialize(state); !result) {
         std::cerr << result.what() << std::endl;
@@ -556,7 +600,8 @@ int main() {
     while (!ShouldWindowClose(state)) {
         Event event;
         while (PollEvent(state, event)) {
-            std::visit(overloaded {
+            HandleEvent(
+                event,
                 [&](const KeyEvent &ev) {
                     if (ev.key_down) {
                         if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
@@ -568,9 +613,8 @@ int main() {
                         if (ev.key_code == KeyCode::K_C && ev.modifiers == 0)
                             color = !color;
                     }
-                },
-                [](const auto &) {},
-            }, event);
+                }
+            );
         }
 
         BeginDrawing(state);

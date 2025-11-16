@@ -14,7 +14,7 @@
 #include <stack>
 #include <string>
 #include <unordered_map>
-#include <variant>
+#include <utility>
 #include <vector>
 #include <wchar.h>
 
@@ -30,11 +30,12 @@
 
 #ifdef OS_LINUX
 #    include <cerrno>
-#    include <csignal>
-#    include <cstring>
 #    include <charconv>
 #    include <clocale>
 #    include <concepts>
+#    include <csignal>
+#    include <cstring>
+
 #endif
 
 #define ESC "\033"
@@ -390,6 +391,10 @@ namespace nite
             // cell.style.mode = cell.style.mode;
             cell.style.mode = style.mode & ~(STYLE_NO_FG | STYLE_NO_BG);
             return true;
+        }
+
+        bool set_cell(size_t col, size_t row, const StyledChar st_char) {
+            return set_cell(col, row, st_char.value, st_char.style);
         }
 
         internal::Cell &get_cell(size_t col, size_t row) {
@@ -926,13 +931,19 @@ namespace nite
         }
 
         std::vector<std::string> lines;
-        std::istringstream ss(info.text);
-        for (std::string line; std::getline(ss, line);)
-            if (info.wrap)
-                for (size_t i = 0; i < line.size(); i += info.size.width)
-                    lines.push_back(line.substr(i, info.size.width));
-            else
-                lines.push_back(line);
+        // Split lines
+        for (size_t start = 0, i = 0; i <= info.text.size(); i++) {
+            if (i == info.text.size() || info.text[i] == '\n') {
+                // std::string line(info.text.begin() + start, info.text.begin() + i);
+                auto line = info.text.substr(start, i - start);
+                if (info.wrap)
+                    for (size_t i = 0; i < line.size(); i += info.size.width)
+                        lines.push_back(line.substr(i, info.size.width));
+                else
+                    lines.push_back(std::move(line));
+                start = i + 1;
+            }
+        }
 
         BeginPane(state, info.pos, info.size);
 
@@ -1089,6 +1100,192 @@ namespace nite
         EndPane(state);
     }
 
+    void RichTextBox(State &state, RichTextBoxInfo info) {
+        if (internal::StaticBox(info.pos, info.size).contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
+            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
+                if (info.on_click)
+                    while (count--)
+                        info.on_click(std::forward<RichTextBoxInfo &>(info));
+            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
+                if (info.on_menu)
+                    while (count--)
+                        info.on_menu(std::forward<RichTextBoxInfo &>(info));
+            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
+                if (info.on_click2)
+                    while (count--)
+                        info.on_click2(std::forward<RichTextBoxInfo &>(info));
+            } else if (info.on_hover)
+                info.on_hover(std::forward<RichTextBoxInfo &>(info));
+        }
+
+        std::vector<std::vector<StyledChar>> lines;
+        for (size_t start = 0, i = 0; i <= info.text.size(); i++) {
+            if (i == info.text.size() || info.text[i].value == '\n') {
+                std::vector<StyledChar> line(info.text.begin() + start, info.text.begin() + i);
+                if (info.wrap) {
+                    for (size_t i = 0; i < line.size(); i += info.size.width)
+                        lines.emplace_back(line.begin() + i, line.begin() + std::min(line.size(), i + info.size.width));
+                } else
+                    lines.push_back(std::move(line));
+                start = i + 1;
+            }
+        }
+
+        BeginPane(state, info.pos, info.size);
+
+        switch (info.align) {
+        case Align::TOP_LEFT:
+            for (size_t row = 0; row < info.size.height; row++)
+                if (row < lines.size()) {
+                    const auto &line = lines[row];
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col < line.size())
+                            state.impl->set_cell(col, row, line[col]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            break;
+        case Align::TOP:
+            for (size_t row = 0; row < info.size.height; row++)
+                if (row < lines.size()) {
+                    const auto &line = lines[row];
+                    const auto col_start = (info.size.width - line.size()) / 2;
+                    const auto col_end = col_start + line.size();
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            break;
+        case Align::TOP_RIGHT:
+            for (size_t row = 0; row < info.size.height; row++)
+                if (row < lines.size()) {
+                    const auto &line = lines[row];
+                    const auto col_start = info.size.width - line.size();
+                    const auto col_end = info.size.width;
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            break;
+        case Align::LEFT:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = (info.size.height - lines.size()) / 2;
+                const auto row_end = row_start + lines.size();
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col < line.size())
+                            state.impl->set_cell(col, row, line[col]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::CENTER:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = (info.size.height - lines.size()) / 2;
+                const auto row_end = row_start + lines.size();
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    const auto col_start = (info.size.width - line.size()) / 2;
+                    const auto col_end = col_start + line.size();
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::RIGHT:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = (info.size.height - lines.size()) / 2;
+                const auto row_end = row_start + lines.size();
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    const auto col_start = info.size.width - line.size();
+                    const auto col_end = info.size.width;
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::BOTTOM_LEFT:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = info.size.height - lines.size();
+                const auto row_end = info.size.height;
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col < line.size())
+                            state.impl->set_cell(col, row, line[col]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::BOTTOM:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = info.size.height - lines.size();
+                const auto row_end = info.size.height;
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    const auto col_start = (info.size.width - line.size()) / 2;
+                    const auto col_end = col_start + line.size();
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        case Align::BOTTOM_RIGHT:
+            for (size_t row = 0; row < info.size.height; row++) {
+                const auto row_start = info.size.height - lines.size();
+                const auto row_end = info.size.height;
+                if (row_start <= row && row < row_end) {
+                    const auto &line = lines[row - row_start];
+                    const auto col_start = info.size.width - line.size();
+                    const auto col_end = info.size.width;
+                    for (size_t col = 0; col < info.size.width; col++)
+                        if (col_start <= col && col < col_end)
+                            state.impl->set_cell(col, row, line[col - col_start]);
+                        else
+                            state.impl->set_cell(col, row, ' ', info.style);
+                } else
+                    for (size_t col = 0; col < info.size.width; col++)
+                        state.impl->set_cell(col, row, ' ', info.style);
+            }
+            break;
+        }
+
+        EndPane(state);
+    }
+
     void ProgressBar(State &state, ProgressBarInfo info) {
         if (internal::StaticBox(info.pos, Size{.width = info.length, .height = 1})
                     .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
@@ -1156,7 +1353,6 @@ namespace nite
             }
             total_width += max_col_widths[col] = max;
         }
-
 
         if (info.show_border) {
             // Data:
@@ -1289,49 +1485,178 @@ namespace nite
         }
     }
 
-    template<class... Ts>
-    struct overloaded : Ts... {
-        using Ts::operator()...;
-    };
-    // Some compilers might require this explicit deduction guide
-    template<class... Ts>
-    overloaded(Ts...) -> overloaded<Ts...>;
+    std::vector<StyledChar> TextInputState::process(
+            const Style text_style, const Style selection_style, const Style cursor_style, const Style cursor_style_ins, const Style cursor_style_sel
+    ) {
+        std::vector<StyledChar> result;
+
+        const auto [selection_start, selection_end] = get_selection_range();
+        const Style cur_style = selection_mode ? cursor_style_sel : insert_mode ? cursor_style_ins : cursor_style;
+
+        for (size_t i = 0; i <= data.size(); i++) {
+            if (i == cursor) {
+                if (i == data.size() || data[i] == '\n')
+                    result.push_back(StyledChar{.value = ' ', .style = cur_style});
+                if (i < data.size())
+                    result.push_back(StyledChar{.value = static_cast<wchar_t>(data[i]), .style = cur_style});
+            } else if (i < data.size()) {
+                if (selection_mode && selection_start <= i && i < selection_end)
+                    result.push_back(StyledChar{.value = static_cast<wchar_t>(data[i]), .style = selection_style});
+                else
+                    result.push_back(StyledChar{.value = static_cast<wchar_t>(data[i]), .style = text_style});
+            }
+        }
+
+        return result;
+    }
+
+    void TextInput(State &state, TextInputState &text_state, TextInputInfo info) {
+        for (const auto &event: text_state.get_captured_events()) {
+            HandleEvent(event, [&](const KeyEvent &ev) {
+                if (!ev.key_down)
+                    return;
+                switch (ev.key_code) {
+                case KeyCode::ESCAPE:
+                    text_state.end_selection();
+                    break;
+                case KeyCode::BACKSPACE:
+                    if (ev.modifiers == 0) {
+                        if (text_state.is_selected()) {
+                            text_state.erase_selection();
+                            text_state.end_selection();
+                        } else
+                            text_state.on_key_backspace();
+                    }
+                    break;
+                case KeyCode::DELETE:
+                    if (ev.modifiers == 0) {
+                        if (text_state.is_selected()) {
+                            text_state.erase_selection();
+                            text_state.end_selection();
+                        } else
+                            text_state.on_key_delete();
+                    }
+                    break;
+                case KeyCode::LEFT:
+                    if (ev.modifiers == 0) {
+                        if (text_state.is_selected()) {
+                            const auto selection_start = text_state.get_selection_range().first;
+                            text_state.end_selection();
+                            text_state.set_cursor(selection_start);
+                        } else
+                            text_state.move_left();
+                    }
+                    if (ev.modifiers & KEY_SHIFT) {
+                        text_state.start_selection();
+                        text_state.move_left();
+                    }
+                    break;
+                case KeyCode::RIGHT:
+                    if (ev.modifiers == 0) {
+                        if (text_state.is_selected()) {
+                            const auto selection_end = text_state.get_selection_range().second;
+                            text_state.end_selection();
+                            text_state.set_cursor(selection_end);
+                        } else
+                            text_state.move_right();
+                    }
+                    if (ev.modifiers & KEY_SHIFT) {
+                        text_state.start_selection();
+                        text_state.move_right();
+                    }
+                    break;
+                case KeyCode::HOME:
+                    if (ev.modifiers == 0) {
+                        if (text_state.is_selected())
+                            text_state.end_selection();
+                        text_state.go_home();
+                    }
+                    if (ev.modifiers & KEY_SHIFT) {
+                        text_state.start_selection();
+                        text_state.go_home();
+                    }
+                    break;
+                case KeyCode::END:
+                    if (ev.modifiers == 0) {
+                        if (text_state.is_selected())
+                            text_state.end_selection();
+                        text_state.go_end();
+                    }
+                    if (ev.modifiers & KEY_SHIFT) {
+                        text_state.start_selection();
+                        text_state.go_end();
+                    }
+                    break;
+                case KeyCode::INSERT:
+                    if (ev.modifiers == 0)
+                        text_state.toggle_insert_mode();
+                    break;
+                default:
+                    // FIXME: Fix Enter key
+                    if (info.handle_enter_as_event && ev.key_code == KeyCode::ENTER) {
+                        if (info.on_enter)
+                            info.on_enter(std::forward<TextInputInfo &>(info));
+                        break;
+                    }
+
+                    if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
+                        if (text_state.is_selected()) {
+                            text_state.erase_selection();
+                            text_state.end_selection();
+                        }
+                        text_state.insert_char(ev.key_char);
+                    }
+                    break;
+                }
+            });
+        }
+
+        // clang-format off
+        RichTextBox(state, {
+            .text = text_state.process(info.text_style, info.selection_style, info.cursor_style, info.cursor_style_ins, info.cursor_style_sel),
+            .pos = info.pos,
+            .size = info.size,
+            .style = info.text_style,
+            .wrap = info.wrap,
+            .align = info.align,
+        });
+        // clang-format on
+
+        text_state.clear_captured_events();
+    }
 
     bool PollEvent(State &state, Event &event) {
         if (internal::PollRawEvent(event)) {
-            std::visit(
-                    overloaded{
-                            [&](const KeyEvent &ev) {
-                                state.impl->key_states[ev.key_code] = KeyState{.printable = is_print(ev.key_char), .down = ev.key_down};
-                            },
-                            [&](const MouseEvent &ev) {
-                                switch (ev.kind) {
-                                case MouseEventKind::CLICK:
-                                    state.impl->btn_states[static_cast<size_t>(ev.button)].click1_count++;
-                                    break;
-                                case MouseEventKind::DOUBLE_CLICK:
-                                    state.impl->btn_states[static_cast<size_t>(ev.button)].click2_count++;
-                                    break;
-                                case MouseEventKind::MOVED:
-                                    state.impl->mouse_pos = ev.pos;
-                                    break;
-                                case MouseEventKind::SCROLL_DOWN:
-                                    state.impl->mouse_scroll_v++;
-                                    break;
-                                case MouseEventKind::SCROLL_UP:
-                                    state.impl->mouse_scroll_v--;
-                                    break;
-                                case MouseEventKind::SCROLL_LEFT:
-                                    state.impl->mouse_scroll_h--;
-                                    break;
-                                case MouseEventKind::SCROLL_RIGHT:
-                                    state.impl->mouse_scroll_h++;
-                                    break;
-                                }
-                            },
-                            [](const auto &) {}
+            HandleEvent(
+                    event,
+                    [&](const KeyEvent &ev) {
+                        state.impl->key_states[ev.key_code] = KeyState{.printable = is_print(ev.key_char), .down = ev.key_down};
                     },
-                    event
+                    [&](const MouseEvent &ev) {
+                        switch (ev.kind) {
+                        case MouseEventKind::CLICK:
+                            state.impl->btn_states[static_cast<size_t>(ev.button)].click1_count++;
+                            break;
+                        case MouseEventKind::DOUBLE_CLICK:
+                            state.impl->btn_states[static_cast<size_t>(ev.button)].click2_count++;
+                            break;
+                        case MouseEventKind::MOVED:
+                            state.impl->mouse_pos = ev.pos;
+                            break;
+                        case MouseEventKind::SCROLL_DOWN:
+                            state.impl->mouse_scroll_v++;
+                            break;
+                        case MouseEventKind::SCROLL_UP:
+                            state.impl->mouse_scroll_v--;
+                            break;
+                        case MouseEventKind::SCROLL_LEFT:
+                            state.impl->mouse_scroll_h--;
+                            break;
+                        case MouseEventKind::SCROLL_RIGHT:
+                            state.impl->mouse_scroll_h++;
+                            break;
+                        }
+                    }
             );
             return true;
         }
@@ -1386,7 +1711,7 @@ namespace nite
 namespace nite::internal::console
 {
     void set_style(const Style style) {
-        // Refer to https://learn.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
+        // Refer to: https://learn.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
         if (style.mode & STYLE_RESET)
             print(CSI "0m");
         if (style.mode & STYLE_BOLD)
@@ -1663,6 +1988,8 @@ namespace nite::internal
                 kind = MouseEventKind::CLICK;
                 if (info.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED)
                     button = MouseButton::LEFT;
+                else if (info.dwButtonState & (FROM_LEFT_2ND_BUTTON_PRESSED | FROM_LEFT_3RD_BUTTON_PRESSED | FROM_LEFT_4TH_BUTTON_PRESSED))
+                    button = MouseButton::MIDDLE;
                 else if (info.dwButtonState & RIGHTMOST_BUTTON_PRESSED)
                     button = MouseButton::RIGHT;
                 else
@@ -1673,6 +2000,8 @@ namespace nite::internal
                 kind = MouseEventKind::DOUBLE_CLICK;
                 if (info.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED)
                     button = MouseButton::LEFT;
+                else if (info.dwButtonState & (FROM_LEFT_2ND_BUTTON_PRESSED | FROM_LEFT_3RD_BUTTON_PRESSED | FROM_LEFT_4TH_BUTTON_PRESSED))
+                    button = MouseButton::MIDDLE;
                 else if (info.dwButtonState & RIGHTMOST_BUTTON_PRESSED)
                     button = MouseButton::RIGHT;
                 else
@@ -2160,12 +2489,12 @@ namespace nite::internal
 #endif
 
 #ifdef OS_LINUX
-#    include <unistd.h>
-#    include <termios.h>
-#    include <sys/ioctl.h>
 #    include <bits/types/struct_timeval.h>
+#    include <sys/ioctl.h>
 #    include <sys/select.h>
 #    include <sys/types.h>
+#    include <termios.h>
+#    include <unistd.h>
 
 namespace nite::internal::console
 {

@@ -1,12 +1,14 @@
 #pragma once
 
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <functional>
 #include <string>
 #include <memory>
+#include <utility>
 #include <variant>
 
 // --------------------------------
@@ -119,10 +121,6 @@ namespace nite
         Color fg = Color::from_hex(0xffffff);
         uint8_t mode = STYLE_RESET;
 
-        constexpr Style reverse() const {
-            return Style{.bg = fg, .fg = bg, .mode = mode};
-        }
-
         constexpr Style invert() const {
             return Style{.bg = bg.invert(), .fg = fg.invert(), .mode = mode};
         }
@@ -139,6 +137,8 @@ namespace nite
     struct StyledChar {
         wchar_t value = '\0';
         Style style = {};
+
+        ~StyledChar() = default;
     };
 
     struct BoxBorder {
@@ -181,91 +181,91 @@ namespace nite
     };
 
     inline static const constexpr BoxBorder BOX_BORDER_LIGHT_DASHED2 = {
-        {L'┌', {}},
-        {L'╌', {}},
-        {L'┐', {}},
-        {L'╎', {}},
-        {L'╎', {}},
-        {L'└', {}},
-        {L'╌', {}},
-        {L'┘', {}},
+            {L'┌', {}},
+            {L'╌', {}},
+            {L'┐', {}},
+            {L'╎', {}},
+            {L'╎', {}},
+            {L'└', {}},
+            {L'╌', {}},
+            {L'┘', {}},
     };
 
     inline static const constexpr BoxBorder BOX_BORDER_LIGHT_DASHED3 = {
-        {L'┌', {}},
-        {L'┄', {}},
-        {L'┐', {}},
-        {L'┆', {}},
-        {L'┆', {}},
-        {L'└', {}},
-        {L'┄', {}},
-        {L'┘', {}},
+            {L'┌', {}},
+            {L'┄', {}},
+            {L'┐', {}},
+            {L'┆', {}},
+            {L'┆', {}},
+            {L'└', {}},
+            {L'┄', {}},
+            {L'┘', {}},
     };
 
     inline static const constexpr BoxBorder BOX_BORDER_LIGHT_DASHED4 = {
-        {L'┌', {}},
-        {L'┈', {}},
-        {L'┐', {}},
-        {L'┊', {}},
-        {L'┊', {}},
-        {L'└', {}},
-        {L'┈', {}},
-        {L'┘', {}},
+            {L'┌', {}},
+            {L'┈', {}},
+            {L'┐', {}},
+            {L'┊', {}},
+            {L'┊', {}},
+            {L'└', {}},
+            {L'┈', {}},
+            {L'┘', {}},
     };
 
     inline static const constexpr BoxBorder BOX_BORDER_HEAVY_DASHED2 = {
-        {L'┏', {}},
-        {L'╍', {}},
-        {L'┓', {}},
-        {L'╏', {}},
-        {L'╏', {}},
-        {L'┗', {}},
-        {L'╍', {}},
-        {L'┛', {}},
+            {L'┏', {}},
+            {L'╍', {}},
+            {L'┓', {}},
+            {L'╏', {}},
+            {L'╏', {}},
+            {L'┗', {}},
+            {L'╍', {}},
+            {L'┛', {}},
     };
 
     inline static const constexpr BoxBorder BOX_BORDER_HEAVY_DASHED3 = {
-        {L'┏', {}},
-        {L'┅', {}},
-        {L'┓', {}},
-        {L'┇', {}},
-        {L'┇', {}},
-        {L'┗', {}},
-        {L'┅', {}},
-        {L'┛', {}},
+            {L'┏', {}},
+            {L'┅', {}},
+            {L'┓', {}},
+            {L'┇', {}},
+            {L'┇', {}},
+            {L'┗', {}},
+            {L'┅', {}},
+            {L'┛', {}},
     };
 
     inline static const constexpr BoxBorder BOX_BORDER_HEAVY_DASHED4 = {
-        {L'┏', {}},
-        {L'┉', {}},
-        {L'┓', {}},
-        {L'┋', {}},
-        {L'┋', {}},
-        {L'┗', {}},
-        {L'┉', {}},
-        {L'┛', {}},
+            {L'┏', {}},
+            {L'┉', {}},
+            {L'┓', {}},
+            {L'┋', {}},
+            {L'┋', {}},
+            {L'┗', {}},
+            {L'┉', {}},
+            {L'┛', {}},
     };
 
     inline static const constexpr BoxBorder BOX_BORDER_DOUBLE = {
-        {L'╔', {}},
-        {L'═', {}},
-        {L'╗', {}},
-        {L'║', {}},
-        {L'║', {}},
-        {L'╚', {}},
-        {L'═', {}},
-        {L'╝', {}},
+            {L'╔', {}},
+            {L'═', {}},
+            {L'╗', {}},
+            {L'║', {}},
+            {L'║', {}},
+            {L'╚', {}},
+            {L'═', {}},
+            {L'╝', {}},
     };
 
     inline static const constexpr BoxBorder BOX_BORDER_ROUNDED = {
-        {L'╭', {}},
-        {L'─', {}},
-        {L'╮', {}},
-        {L'│', {}},
-        {L'│', {}},
-        {L'╰', {}},
-        {L'─', {}},
-        {L'╯', {}},
+            {L'╭', {}},
+            {L'─', {}},
+            {L'╮', {}},
+            {L'│', {}},
+            {L'│', {}},
+            {L'╰', {}},
+            {L'─', {}},
+            {L'╯', {}},
     };
 
     struct TableBorder {
@@ -574,9 +574,6 @@ namespace nite
             return !(*this == other);
         }
     };
-
-    template<typename T>
-    using Handler = std::function<void(T &)>;
 }    // namespace nite
 
 // --------------------------------
@@ -710,357 +707,14 @@ namespace nite
 }    // namespace nite
 
 // --------------------------------
-//  Library definitions
-// --------------------------------
-
-namespace nite
-{
-    struct State {
-        struct StateImpl;
-        std::unique_ptr<StateImpl> impl;
-
-        State(std::unique_ptr<StateImpl> impl);
-
-        State() = delete;
-        State(const State &) = delete;
-        State(State &&) = delete;
-        State &operator==(const State &) = delete;
-        State &operator==(State &&) = delete;
-    };
-
-    /**
-     * Gets the size of the console window
-     * @return Size
-     */
-    Size GetWindowSize();
-    /**
-     * Returns the console state
-     * @return State& 
-     */
-    State &GetState();
-
-    /**
-     * Initializes the console and prepares all necessary components
-     * @param state the console state to work on
-     * @return Result
-     */
-    Result Initialize(State &state);
-    /**
-     * Cleanups the console and restores the terminal state
-     * @param state the console state to work on
-     * @return Result
-     */
-    Result Cleanup();
-
-    /**
-     * Returns the size of the console screen buffer for the current frame
-     * @param state the console state to work on
-     * @return Size 
-     */
-    Size GetBufferSize(State &state);
-    /**
-     * Returns the size of the current selected pane
-     * @param state the console state to work on
-     * @return Size 
-     */
-    Size GetPaneSize(State &state);
-    /**
-     * Returns the delta time in seconds
-     * @param state the console state to work on
-     * @return double 
-     */
-    double GetDeltaTime(State &state);
-    /**
-     * Returns whether the console window should be closed
-     * @param state the console state to work on
-     * @return true if window is closed
-     * @return false if window is not closed
-     */
-    bool ShouldWindowClose(State &state);
-
-    /**
-     * Creates and pushes a new screen buffer to the swapchain
-     * @param state the console state to work on
-     */
-    void BeginDrawing(State &state);
-    /**
-     * Pops the latest frame from the swapchain and selectively renders 
-     * the screen buffer on the console window
-     * @param state the console state to work on
-     */
-    void EndDrawing(State &state);
-    /**
-     * Closes the console window
-     * @param state the console state to work on
-     */
-    void CloseWindow(State &state);
-
-    /**
-     * Sets a specific cell on the console window
-     * @param state the console state to work on
-     * @param value the cell text
-     * @param position the position of the cell
-     * @param style the style of the cell
-     */
-    void SetCell(State &state, wchar_t value, const Position position, const Style style = {});
-    /**
-     * Sets the style of a specific cell on the console window
-     * @param state the console state to work on
-     * @param position the position of the cell
-     * @param style the style of the cell
-     */
-    void SetCellStyle(State &state, const Position position, const Style style);
-    /**
-     * Sets the bg color of a specific cell on the console window
-     * @param state the console state to work on
-     * @param position the position of the cell
-     * @param style the bg color of the cell
-     */
-    void SetCellBG(State &state, const Position position, const Color color);
-    /**
-     * Sets the fg color of a specific cell on the console window
-     * @param state the console state to work on
-     * @param position the position of the cell
-     * @param style the fg color of the cell
-     */
-    void SetCellFG(State &state, const Position position, const Color color);
-    /**
-     * Fills a range of cells on the console window 
-     * where \p pos1 and \p pos2 are diagonally opposite.
-     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
-     * @param state the console state to work on
-     * @param value the cell text
-     * @param pos1 the first position provided
-     * @param pos2 the second position provided
-     * @param style the style of the cells
-     */
-    void FillCells(State &state, wchar_t value, const Position pos1, const Position pos2, const Style style = {});
-    /**
-     * Fills a range of cells on the console window given the top_left position and size.
-     * Filling starts from (col, row) inclusive to (col+width, row+height) exclusive.
-     * @param state the console state to work on
-     * @param value the cell text
-     * @param pos the top left corner
-     * @param size the size of the range
-     * @param style the style of the cells
-     */
-    void FillCells(State &state, wchar_t value, const Position pos, const Size size, const Style style = {});
-    /**
-     * Fills the background of a range of cells on the console window 
-     * where \p pos1 and \p pos2 are diagonally opposite.
-     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
-     * @param state the console state to work on
-     * @param value the cell text
-     * @param pos1 the first position provided
-     * @param pos2 the second position provided
-     * @param color the color of the cells
-     */
-    void FillBackground(State &state, const Position pos1, const Position pos2, const Color color);
-    /**
-     * Fill the background of all cells of the selected pane
-     * @param state the console state to work on
-     * @param color the background color
-     */
-    void FillBackground(State &state, const Color color);
-    /**
-     * Fills the foreground of a range of cells on the console window 
-     * where \p pos1 and \p pos2 are diagonally opposite.
-     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
-     * @param state the console state to work on
-     * @param value the cell text
-     * @param pos1 the first position provided
-     * @param pos2 the second position provided
-     * @param color the color of the cells
-     */
-    void FillBackground(State &state, const Position pos, const Size size, const Color color);
-    /**
-     * Fills the background of a range of cells on the console window 
-     * where \p pos1 and \p pos2 are diagonally opposite.
-     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
-     * @param state the console state to work on
-     * @param value the cell text
-     * @param pos1 the first position provided
-     * @param pos2 the second position provided
-     * @param color the color of the cells
-     */
-    void FillForeground(State &state, const Position pos1, const Position pos2, const Color color);
-    /**
-     * Fills the foreground of a range of cells on the console window 
-     * where \p pos1 and \p pos2 are diagonally opposite.
-     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
-     * @param state the console state to work on
-     * @param value the cell text
-     * @param pos1 the first position provided
-     * @param pos2 the second position provided
-     * @param color the color of the cells
-     */
-    void FillForeground(State &state, const Position pos, const Size size, const Color color);
-    /**
-     * Fill the foreground of all cells of the selected pane
-     * @param state the console state to work on
-     * @param color the foreground color
-     */
-    void FillForeground(State &state, const Color color);
-    /**
-     * Draws a line on the console window where \p start is the starting point and 
-     * \p end is the ending point. Line is always drawn starting from \p start to \p end (exclusive).
-     * @param state the console state to work on
-     * @param start the starting point
-     * @param end the ending point
-     * @param fill the fill of the line
-     * @param style the style of the line
-     */
-    void DrawLine(State &state, const Position start, const Position end, wchar_t fill, const Style style = {});
-
-    void BeginPane(State &state, const Position top_left, const Size size);
-
-    struct ScrollPaneInfo {
-        Position pos = {};
-        Size min_size = {};
-        Size max_size = {};
-        ScrollBar scroll_bar = SCROLL_DEFAULT;
-        float scroll_factor = 1.0f;
-        bool show_vscroll_bar = true;
-        bool show_hscroll_bar = true;
-        bool show_scroll_home = true;
-
-        Handler<ScrollPaneInfo> on_vscroll = {};
-        Handler<ScrollPaneInfo> on_hscroll = {};
-    };
-
-    void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info);
-
-    struct GridPaneInfo {
-        Position pos = {};
-        Size size = {};
-        std::vector<double> col_sizes = {100};
-        std::vector<double> row_sizes = {100};
-    };
-
-    void BeginGridPane(State &state, GridPaneInfo info);
-    void BeginGridCell(State &state, size_t col, size_t row);
-
-    void BeginNoPane(State &state);
-
-    void EndPane(State &state);
-
-    void DrawBorder(State &state, const BoxBorder &border = BOX_BORDER_DEFAULT);
-    void DrawHDivider(State &state, size_t row, wchar_t fill = L'─', Style style = {});
-    void DrawVDivider(State &state, size_t col, wchar_t fill = L'│', Style style = {});
-
-    struct TextInfo {
-        std::string text = {};
-        Position pos = {};
-        Style style = {};
-        Handler<TextInfo> on_hover = {};
-        Handler<TextInfo> on_click = {};
-        Handler<TextInfo> on_click2 = {};
-        Handler<TextInfo> on_menu = {};
-    };
-
-    /**
-     * Displays text on the console window
-     * @param state 
-     * @param info 
-     */
-    void Text(State &state, TextInfo info);
-
-    struct TextBoxInfo {
-        std::string text = {};
-        Position pos = {};
-        Size size = {};
-        Style style = {};
-        bool wrap = true;
-        Align align = Align::TOP_LEFT;
-
-        Handler<TextBoxInfo> on_hover = {};
-        Handler<TextBoxInfo> on_click = {};
-        Handler<TextBoxInfo> on_click2 = {};
-        Handler<TextBoxInfo> on_menu = {};
-    };
-
-    void TextBox(State &state, TextBoxInfo info);
-
-    // TODO: find a better way to describe progress bar motion
-
-    inline static constexpr std::array DEFAULT_MOTION = {
-            StyledChar{L'█', {}},
-    };
-
-    inline static constexpr std::array SLEEK_MOTION = {
-            StyledChar{L'▏', {}},
-            StyledChar{L'▎', {}},
-            StyledChar{L'▍', {}},
-            StyledChar{L'▌', {}},
-            StyledChar{L'▋', {}},
-            StyledChar{L'▊', {}},
-            StyledChar{L'▉', {}},
-            StyledChar{L'█', {}},
-    };
-
-    // template<size_t N>
-    // struct PBMotion {
-    //     std::array<StyledChar, N> top_down;
-    //     std::array<StyledChar, N> down_top;
-    //     std::array<StyledChar, N> left_right;
-    //     std::array<StyledChar, N> right_left;
-    // };
-
-    // enum class PBDirection {
-    //     TOP_DOWN,
-    //     DOWN_TOP,
-    //     LEFT_RIGHT,
-    //     RIGHT_LEFT,
-    // };
-
-    // TODO: implement all other progress bar motions
-
-    struct ProgressBarInfo {
-        /// value is from [0, 1]
-        double value = 0.0f;
-        Position pos = {};
-        size_t length = 0;
-        std::vector<StyledChar> motion = {DEFAULT_MOTION.begin(), DEFAULT_MOTION.end()};
-        Style style = {};
-
-        Handler<ProgressBarInfo> on_hover = {};
-        Handler<ProgressBarInfo> on_click = {};
-        Handler<ProgressBarInfo> on_click2 = {};
-        Handler<ProgressBarInfo> on_menu = {};
-    };
-
-    void ProgressBar(State &state, ProgressBarInfo info);
-
-    struct SimpleTableInfo {
-        std::vector<std::string> data;
-        bool include_header_row = true;
-        size_t num_cols = 0;
-        size_t num_rows = 0;
-
-        Position pos;
-        Style header_style = {.mode = STYLE_BOLD};
-        Style table_style = {};
-
-        bool show_border = false;
-        TableBorder border = TABLE_BORDER_DEFAULT;
-    };
-
-    /**
-     * Draws a simple table on the screen and returns the size of the table
-     * 
-     * @param state the console state to work on
-     * @param info the info describing the table
-     * @return Size 
-     */
-    Size SimpleTable(State &state, SimpleTableInfo info);
-}    // namespace nite
-
-// --------------------------------
 //  Event definitions
 // --------------------------------
 
 namespace nite
 {
+    // Forward declaration
+    struct State;
+
 #define KEY_SHIFT ((uint8_t) (1 << 0))    // Shift key
 #define KEY_CTRL  ((uint8_t) (1 << 1))    // Control on macOS, Ctrl on other platforms
 #define KEY_ALT   ((uint8_t) (1 << 2))    // Option on macOS, Alt on other platforms
@@ -1437,7 +1091,7 @@ namespace nite
     enum class MouseButton {
         NONE,
         LEFT,
-        MIDDLE,    // TODO: add middle button support for windows
+        MIDDLE,
         RIGHT,
     };
 
@@ -1465,9 +1119,59 @@ namespace nite
     namespace internal
     {
         bool PollRawEvent(Event &event);
-    }
+
+        template<typename Fn, typename Event>
+        consteval bool is_handler_of_this_event() {
+            return std::invocable<Fn, Event>;
+        }
+
+        template<typename Fn, std::size_t... I>
+        consteval bool is_valid_handler_impl(std::index_sequence<I...>) {
+            return (is_handler_of_this_event<Fn, std::variant_alternative_t<I, Event>>() || ...);
+        }
+
+        template<class Fn>
+        consteval bool is_valid_handler() {
+            return is_valid_handler_impl<Fn>(std::make_index_sequence<std::variant_size_v<Event>>{});
+        }
+
+        template<class Ev, class... Fn>
+        consteval bool has_all_event_handlers_impl1() {
+            return (is_handler_of_this_event<Fn, Ev>() || ...);
+        }
+
+        template<class... Fn, size_t... I>
+        consteval bool has_all_event_handlers_impl0(std::index_sequence<I...>) {
+            return (has_all_event_handlers_impl1<std::variant_alternative_t<I, Event>, Fn...>() && ...);
+        }
+
+        template<class... Fn>
+        consteval bool has_all_event_handlers() {
+            return has_all_event_handlers_impl0<Fn...>(std::make_index_sequence<std::variant_size_v<Event>>{});
+        }
+    }    // namespace internal
 
     bool PollEvent(State &state, Event &event);
+
+    template<class Fn>
+    concept Handler = internal::is_valid_handler<Fn>();
+
+    template<Handler... Handlers>
+    struct HandlerMechanism : Handlers... {
+        using Handlers::operator()...;
+    };
+
+    // Some compilers might require this explicit deduction guide
+    template<class... Handlers>
+    HandlerMechanism(Handlers...) -> HandlerMechanism<Handlers...>;
+
+    template<Handler... Handlers>
+    inline void HandleEvent(Event event, Handlers &&...handlers) {
+        if constexpr (internal::has_all_event_handlers<Handlers...>())
+            std::visit(HandlerMechanism{handlers...}, event);
+        else
+            std::visit(HandlerMechanism{handlers..., [](const auto &) {}}, event);
+    }
 
     // Keyboard
     bool IsKeyPressed(const State &state, KeyCode key_code);
@@ -1482,4 +1186,528 @@ namespace nite
     Position GetMousePosition(const State &state);
     intmax_t GetMouseScrollV(const State &state);
     intmax_t GetMouseScrollH(const State &state);
+}    // namespace nite
+
+// --------------------------------
+//  Library definitions
+// --------------------------------
+
+namespace nite
+{
+    template<typename T>
+    using HandlerFn = std::function<void(T &)>;
+
+    struct State {
+        struct StateImpl;
+        std::unique_ptr<StateImpl> impl;
+
+        State(std::unique_ptr<StateImpl> impl);
+
+        State() = delete;
+        State(const State &) = delete;
+        State(State &&) = delete;
+        State &operator==(const State &) = delete;
+        State &operator==(State &&) = delete;
+    };
+
+    /**
+     * Gets the size of the console window
+     * @return Size
+     */
+    Size GetWindowSize();
+    /**
+     * Returns the console state
+     * @return State& 
+     */
+    State &GetState();
+
+    /**
+     * Initializes the console and prepares all necessary components
+     * @param [inout] state the console state to work on
+     * @return Result
+     */
+    Result Initialize(State &state);
+    /**
+     * Cleanups the console and restores the terminal state
+     * @param [inout] state the console state to work on
+     * @return Result
+     */
+    Result Cleanup();
+
+    /**
+     * Returns the size of the console screen buffer for the current frame
+     * @param [inout] state the console state to work on
+     * @return Size 
+     */
+    Size GetBufferSize(State &state);
+    /**
+     * Returns the size of the current selected pane
+     * @param [inout] state the console state to work on
+     * @return Size 
+     */
+    Size GetPaneSize(State &state);
+    /**
+     * Returns the delta time in seconds
+     * @param [inout] state the console state to work on
+     * @return double 
+     */
+    double GetDeltaTime(State &state);
+    /**
+     * Returns whether the console window should be closed
+     * @param [inout] state the console state to work on
+     * @return true if window is closed
+     * @return false if window is not closed
+     */
+    bool ShouldWindowClose(State &state);
+
+    /**
+     * Creates and pushes a new screen buffer to the swapchain
+     * @param [inout] state the console state to work on
+     */
+    void BeginDrawing(State &state);
+    /**
+     * Pops the latest frame from the swapchain and selectively renders 
+     * the screen buffer on the console window
+     * @param [inout] state the console state to work on
+     */
+    void EndDrawing(State &state);
+    /**
+     * Closes the console window
+     * @param [inout] state the console state to work on
+     */
+    void CloseWindow(State &state);
+
+    /**
+     * Sets a specific cell on the console window
+     * @param [inout] state the console state to work on
+     * @param [in] value the cell text
+     * @param [in] position the position of the cell
+     * @param [in] style the style of the cell
+     */
+    void SetCell(State &state, wchar_t value, const Position position, const Style style = {});
+    /**
+     * Sets the style of a specific cell on the console window
+     * @param [inout] state the console state to work on
+     * @param [in] position the position of the cell
+     * @param [in] style the style of the cell
+     */
+    void SetCellStyle(State &state, const Position position, const Style style);
+    /**
+     * Sets the bg color of a specific cell on the console window
+     * @param [inout] state the console state to work on
+     * @param [in] position the position of the cell
+     * @param [in] style the bg color of the cell
+     */
+    void SetCellBG(State &state, const Position position, const Color color);
+    /**
+     * Sets the fg color of a specific cell on the console window
+     * @param [inout] state the console state to work on
+     * @param [in] position the position of the cell
+     * @param [in] style the fg color of the cell
+     */
+    void SetCellFG(State &state, const Position position, const Color color);
+    /**
+     * Fills a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param [inout] state the console state to work on
+     * @param [in] value the cell text
+     * @param [in] pos1 the first position provided
+     * @param [in] pos2 the second position provided
+     * @param [in] style the style of the cells
+     */
+    void FillCells(State &state, wchar_t value, const Position pos1, const Position pos2, const Style style = {});
+    /**
+     * Fills a range of cells on the console window given the top_left position and size.
+     * Filling starts from (col, row) inclusive to (col+width, row+height) exclusive.
+     * @param [inout] state the console state to work on
+     * @param [in] value the cell text
+     * @param [in] pos the top left corner
+     * @param [in] size the size of the range
+     * @param [in] style the style of the cells
+     */
+    void FillCells(State &state, wchar_t value, const Position pos, const Size size, const Style style = {});
+    /**
+     * Fills the background of a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param [inout] state the console state to work on
+     * @param [in] value the cell text
+     * @param [in] pos1 the first position provided
+     * @param [in] pos2 the second position provided
+     * @param [in] color the color of the cells
+     */
+    void FillBackground(State &state, const Position pos1, const Position pos2, const Color color);
+    /**
+     * Fill the background of all cells of the selected pane
+     * @param [inout] state the console state to work on
+     * @param color the background color
+     */
+    void FillBackground(State &state, const Color color);
+    /**
+     * Fills the foreground of a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param [inout] state the console state to work on
+     * @param [in] value the cell text
+     * @param [in] pos1 the first position provided
+     * @param [in] pos2 the second position provided
+     * @param [in] color the color of the cells
+     */
+    void FillBackground(State &state, const Position pos, const Size size, const Color color);
+    /**
+     * Fills the background of a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param [inout] state the console state to work on
+     * @param [in] value the cell text
+     * @param [in] pos1 the first position provided
+     * @param [in] pos2 the second position provided
+     * @param [in] color the color of the cells
+     */
+    void FillForeground(State &state, const Position pos1, const Position pos2, const Color color);
+    /**
+     * Fills the foreground of a range of cells on the console window 
+     * where \p pos1 and \p pos2 are diagonally opposite.
+     * Filling starts from (col_min, row_min) inclusive to (col_min, row_min) exclusive.
+     * @param [inout] state the console state to work on
+     * @param [in] value the cell text
+     * @param [in] pos1 the first position provided
+     * @param [in] pos2 the second position provided
+     * @param [in] color the color of the cells
+     */
+    void FillForeground(State &state, const Position pos, const Size size, const Color color);
+    /**
+     * Fill the foreground of all cells of the selected pane
+     * @param [inout] state the console state to work on
+     * @param [in] color the foreground color
+     */
+    void FillForeground(State &state, const Color color);
+    /**
+     * Draws a line on the console window where \p start is the starting point and 
+     * \p end is the ending point. Line is always drawn starting from \p start to \p end (exclusive).
+     * @param [inout] state the console state to work on
+     * @param [in] start the starting point
+     * @param [in] end the ending point
+     * @param [in] fill the fill of the line
+     * @param [in] style the style of the line
+     */
+    void DrawLine(State &state, const Position start, const Position end, wchar_t fill, const Style style = {});
+
+    void BeginPane(State &state, const Position top_left, const Size size);
+
+    struct ScrollPaneInfo {
+        Position pos = {};
+        Size min_size = {};
+        Size max_size = {};
+        ScrollBar scroll_bar = SCROLL_DEFAULT;
+        float scroll_factor = 1.0f;
+        bool show_vscroll_bar = true;
+        bool show_hscroll_bar = true;
+        bool show_scroll_home = true;
+
+        HandlerFn<ScrollPaneInfo> on_vscroll = {};
+        HandlerFn<ScrollPaneInfo> on_hscroll = {};
+    };
+
+    void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info);
+
+    struct GridPaneInfo {
+        Position pos = {};
+        Size size = {};
+        std::vector<double> col_sizes = {100};
+        std::vector<double> row_sizes = {100};
+    };
+
+    void BeginGridPane(State &state, GridPaneInfo info);
+    void BeginGridCell(State &state, size_t col, size_t row);
+
+    void BeginNoPane(State &state);
+
+    void EndPane(State &state);
+
+    void DrawBorder(State &state, const BoxBorder &border = BOX_BORDER_DEFAULT);
+    void DrawHDivider(State &state, size_t row, wchar_t fill = L'─', Style style = {});
+    void DrawVDivider(State &state, size_t col, wchar_t fill = L'│', Style style = {});
+
+    struct TextInfo {
+        std::string text = {};
+        Position pos = {};
+        Style style = {};
+        HandlerFn<TextInfo> on_hover = {};
+        HandlerFn<TextInfo> on_click = {};
+        HandlerFn<TextInfo> on_click2 = {};
+        HandlerFn<TextInfo> on_menu = {};
+    };
+
+    /**
+     * Displays text on the console window
+     * @param [inout] state the console state to work on
+     * @param [in] info the text information provided
+     */
+    void Text(State &state, TextInfo info);
+
+    struct TextBoxInfo {
+        std::string text = {};
+        Position pos = {};
+        Size size = {};
+        Style style = {};
+        bool wrap = true;
+        Align align = Align::TOP_LEFT;
+
+        HandlerFn<TextBoxInfo> on_hover = {};
+        HandlerFn<TextBoxInfo> on_click = {};
+        HandlerFn<TextBoxInfo> on_click2 = {};
+        HandlerFn<TextBoxInfo> on_menu = {};
+    };
+
+    void TextBox(State &state, TextBoxInfo info);
+
+    struct RichTextBoxInfo {
+        std::vector<StyledChar> text = {};
+        Position pos = {};
+        Size size = {};
+        Style style = {};
+        bool wrap = true;
+        Align align = Align::TOP_LEFT;
+
+        HandlerFn<RichTextBoxInfo> on_hover = {};
+        HandlerFn<RichTextBoxInfo> on_click = {};
+        HandlerFn<RichTextBoxInfo> on_click2 = {};
+        HandlerFn<RichTextBoxInfo> on_menu = {};
+    };
+
+    void RichTextBox(State &state, RichTextBoxInfo info);
+
+    // TODO: find a better way to describe progress bar motion
+
+    inline static constexpr std::array DEFAULT_MOTION = {
+            StyledChar{L'█', {}},
+    };
+
+    inline static constexpr std::array SLEEK_MOTION = {
+            StyledChar{L'▏', {}},
+            StyledChar{L'▎', {}},
+            StyledChar{L'▍', {}},
+            StyledChar{L'▌', {}},
+            StyledChar{L'▋', {}},
+            StyledChar{L'▊', {}},
+            StyledChar{L'▉', {}},
+            StyledChar{L'█', {}},
+    };
+
+    // template<size_t N>
+    // struct PBMotion {
+    //     std::array<StyledChar, N> top_down;
+    //     std::array<StyledChar, N> down_top;
+    //     std::array<StyledChar, N> left_right;
+    //     std::array<StyledChar, N> right_left;
+    // };
+
+    // enum class PBDirection {
+    //     TOP_DOWN,
+    //     DOWN_TOP,
+    //     LEFT_RIGHT,
+    //     RIGHT_LEFT,
+    // };
+
+    // TODO: implement all other progress bar motions
+
+    struct ProgressBarInfo {
+        /// value is from [0, 1]
+        double value = 0.0f;
+        Position pos = {};
+        size_t length = 0;
+        std::vector<StyledChar> motion = {DEFAULT_MOTION.begin(), DEFAULT_MOTION.end()};
+        Style style = {};
+
+        HandlerFn<ProgressBarInfo> on_hover = {};
+        HandlerFn<ProgressBarInfo> on_click = {};
+        HandlerFn<ProgressBarInfo> on_click2 = {};
+        HandlerFn<ProgressBarInfo> on_menu = {};
+    };
+
+    void ProgressBar(State &state, ProgressBarInfo info);
+
+    struct SimpleTableInfo {
+        std::vector<std::string> data = {};
+        bool include_header_row = true;
+        size_t num_cols = 0;
+        size_t num_rows = 0;
+
+        Position pos = {};
+        Style header_style = {.mode = STYLE_BOLD};
+        Style table_style = {};
+
+        bool show_border = false;
+        TableBorder border = TABLE_BORDER_DEFAULT;
+    };
+
+    /**
+     * Draws a simple table on the screen and returns the size of the table
+     * 
+     * @param [inout] state the console state to work on
+     * @param [in] info the info describing the table
+     * @return Size 
+     */
+    Size SimpleTable(State &state, SimpleTableInfo info);
+
+    class TextInputState {
+        bool insert_mode = false;
+
+        std::string data = "";
+        size_t cursor = 0;
+
+        bool selection_mode = false;
+        size_t selection_pivot = 0;
+
+        std::vector<Event> captured_evs;
+
+      public:
+        TextInputState() = default;
+        TextInputState(const TextInputState &) = default;
+        TextInputState(TextInputState &&) = default;
+        TextInputState &operator=(const TextInputState &) = default;
+        TextInputState &operator=(TextInputState &&) = default;
+        ~TextInputState() = default;
+
+        void insert_char(char c) {
+            if (insert_mode)
+                data.replace(cursor, 1, 1, c);
+            else
+                data.insert(data.begin() + cursor, c);
+            move_right();
+        }
+
+        void on_key_backspace() {
+            if (1 <= cursor && cursor <= data.size())
+                data.erase(cursor - 1, 1);
+            move_left();
+        }
+
+        void on_key_delete() {
+            if (0 <= cursor && cursor <= data.size() - 1)
+                data.erase(cursor, 1);
+        }
+
+        void move_left(size_t delta = 1) {
+            if (cursor > delta)
+                cursor -= delta;
+            else
+                cursor = 0;
+        }
+
+        void move_right(size_t delta = 1) {
+            if (cursor + delta >= data.size())
+                cursor = data.size();
+            else
+                cursor += delta;
+        }
+
+        void go_home() {
+            cursor = 0;
+        }
+
+        void go_end() {
+            cursor = data.size();
+        }
+
+        void toggle_insert_mode() {
+            insert_mode = !insert_mode;
+        }
+
+        void start_selection() {
+            if (selection_mode)
+                return;
+            selection_mode = true;
+            selection_pivot = cursor;
+        }
+
+        void erase_selection() {
+            if (!selection_mode)
+                return;
+            const auto [selection_start, selection_end] = get_selection_range();
+            data.erase(selection_start, selection_end - selection_start);
+            cursor = selection_pivot = selection_start;
+        }
+
+        void end_selection() {
+            selection_mode = false;
+        }
+
+        std::pair<size_t, size_t> get_selection_range() {
+            if (!selection_mode)
+                return {0, 0};
+            const size_t selection_start = cursor >= selection_pivot ? selection_pivot : cursor;
+            const size_t selection_end = cursor >= selection_pivot ? cursor : selection_pivot;
+            return {selection_start, selection_end};
+        }
+
+        std::string get_selected_text() const {
+            if (!selection_mode)
+                return "";
+            if (cursor >= selection_pivot)
+                return data.substr(selection_pivot, cursor - selection_pivot);
+            else
+                return data.substr(cursor, selection_pivot - cursor);
+        }
+
+        std::vector<StyledChar>
+        process(const Style text_style, const Style selection_style, const Style cursor_style, const Style cursor_style_ins,
+                const Style cursor_style_sel);
+
+        bool is_insert_mode() const {
+            return insert_mode;
+        }
+
+        bool is_selected() const {
+            return selection_mode;
+        }
+
+        const std::string &get_text() const {
+            return data;
+        }
+
+        size_t get_cursor() const {
+            return cursor;
+        }
+
+        void set_cursor(size_t index) {
+            if (index >= data.size())
+                cursor = data.size();
+            cursor = index;
+        }
+
+        const std::vector<Event> &get_captured_events() const {
+            return captured_evs;
+        }
+
+        void capture_event(const Event &event) {
+            if (std::holds_alternative<KeyEvent>(event))
+                captured_evs.push_back(event);
+        }
+
+        void clear_captured_events() {
+            captured_evs.clear();
+        }
+    };
+
+    struct TextInputInfo {
+        Position pos = {};
+        Size size = {};
+        bool wrap = true;
+        Align align = Align::TOP_LEFT;
+
+        Style text_style = {.bg = COLOR_BLACK, .fg = COLOR_WHITE};
+        Style selection_style = {.bg = Color::from_hex(0x3737ac), .fg = COLOR_WHITE};
+        Style cursor_style = {.bg = COLOR_WHITE, .fg = COLOR_BLACK};
+        Style cursor_style_ins = {.bg = Color::from_hex(0xe63f32), .fg = COLOR_WHITE};
+        Style cursor_style_sel = {.bg = Color::from_hex(0x24acf2), .fg = COLOR_WHITE};
+
+        bool handle_enter_as_event = false;
+
+        HandlerFn<TextInputInfo> on_enter = {};
+    };
+
+    void TextInput(State &state, TextInputState &text_state, TextInputInfo info);
 }    // namespace nite
