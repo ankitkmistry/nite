@@ -15,6 +15,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 #include <wchar.h>
 
@@ -35,7 +36,6 @@
 #    include <concepts>
 #    include <csignal>
 #    include <cstring>
-
 #endif
 
 #define ESC "\033"
@@ -744,12 +744,10 @@ namespace nite
         if (mouse_pos == home_cell_btn && (IsMouseClicked(state, MouseButton::LEFT) || IsMouseDoubleClicked(state, MouseButton::LEFT)))
             pivot = {};
 
-        state.impl->selected_stack.push(
-                std::make_unique<internal::ScrollBox>(
-                        info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar,
-                        state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
-                )
-        );
+        state.impl->selected_stack.push(std::make_unique<internal::ScrollBox>(
+                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos,
+                pivot, info.min_size, info.max_size
+        ));
     }
 
     void BeginGridPane(State &state, GridPaneInfo info) {
@@ -2498,12 +2496,466 @@ namespace nite::internal
 #endif
 
 #ifdef OS_LINUX
-#    include <bits/types/struct_timeval.h>
-#    include <sys/ioctl.h>
-#    include <sys/select.h>
-#    include <sys/types.h>
-#    include <termios.h>
-#    include <unistd.h>
+// #    define NITE_USE_NCURSES
+#    ifdef NITE_USE_NCURSES
+
+// The `ncurses` backend has many caveats:
+// ----------------------------------------------------------------------------------------------------
+// 1. It does not have any  support for Escape key
+// 2. It does not have good support for modifier key: Shift+Key
+// 3. It does not have any  support for modifier keys: Ctrl+Key, Ctrl+Shift+Key, Ctrl+Shift+Alt+Key, 
+//                                                     Shift+Alt+Key, Ctrl+Alt+Key, Alt+Key
+// 4. It does not have any  support for mouse scroll: up, down, left, right
+// 5. There is no way to figure out what kind of error occured if any operation fails
+// ----------------------------------------------------------------------------------------------------
+
+#        include <ncurses.h>
+
+namespace nite::internal::console
+{
+    inline static std::string get_last_error() {
+        return std::strerror(errno);
+    }
+
+    bool is_tty() {
+        return isatty(STDOUT_FILENO);
+    }
+
+    Result clear() {
+        if (erase() == ERR)
+            return false;
+        return true;
+    }
+
+    Result size(size_t &width, size_t &height) {
+        width = COLS;
+        height = LINES;
+        return true;
+    }
+
+    Result print(const std::string &text) {
+        if (write(STDOUT_FILENO, text.data(), text.size()) == -1)
+            return std::format("error writing to the console: {}", get_last_error());
+        return true;
+    }
+
+    static std::string old_locale;
+    static mmask_t old_mmask;
+
+    Result init() {
+        // Set locale to utf-8
+        old_locale = std::setlocale(LC_CTYPE, NULL);
+        std::setlocale(LC_CTYPE, "en_US.utf8");
+
+        initscr();               // Start curses mode
+        raw();                   // Make the terminal raw
+        cbreak();                // Disable line buffering, character processing
+        noecho();                // Disable echoing of user input
+        keypad(stdscr, true);    // Now we get LEFT, RIGHT, F1, F2, ... etc
+        meta(stdscr, true);      // Enable `termios->c_cflag |= CS8;`
+        timeout(2);              // getch() has a timeout for 2ms
+        curs_set(0);             // Make cursor invisible
+
+        // Enable mouse events
+        mmask_t mmask = BUTTON1_CLICKED | BUTTON1_DOUBLE_CLICKED | BUTTON2_CLICKED | BUTTON2_DOUBLE_CLICKED | BUTTON3_CLICKED |
+                        BUTTON3_DOUBLE_CLICKED | BUTTON4_CLICKED | BUTTON4_DOUBLE_CLICKED | BUTTON5_CLICKED | BUTTON5_DOUBLE_CLICKED | BUTTON_SHIFT |
+                        BUTTON_CTRL | BUTTON_ALT | REPORT_MOUSE_POSITION;
+        mousemask(mmask, &old_mmask);
+
+        refresh();
+        return true;
+    }
+
+    Result restore() {
+        endwin();    // End curses mode
+
+        // Restore locale
+        std::setlocale(LC_CTYPE, old_locale.c_str());
+        return true;
+    }
+}    // namespace nite::internal::console
+
+namespace nite::internal
+{
+    Result get_key_code(char c, KeyCode &key_code);
+
+    bool PollRawEvent(Event &event) {
+        static std::vector<Event> pending_events;
+
+        if (!pending_events.empty()) {
+            event = pending_events.back();
+            pending_events.pop_back();
+            return true;
+        }
+
+        int c = getch();
+        if (c == ERR)
+            return false;
+
+        switch (c) {
+        case KEY_BACKSPACE:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::BACKSPACE,
+                    .key_char = 0,
+                    .modifiers = 0,
+            };
+            break;
+        case KEY_ENTER:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::ENTER,
+                    .key_char = 0,
+                    .modifiers = 0,
+            };
+            break;
+        case KEY_LEFT:
+        case KEY_SLEFT:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::LEFT,
+                    .key_char = 0,
+                    .modifiers = static_cast<uint8_t>(c == KEY_SLEFT ? KEY_SHIFT : 0),
+            };
+            break;
+        case KEY_RIGHT:
+        case KEY_SRIGHT:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::RIGHT,
+                    .key_char = 0,
+                    .modifiers = static_cast<uint8_t>(c == KEY_SRIGHT ? KEY_SHIFT : 0),
+            };
+            break;
+        case KEY_UP:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::UP,
+                    .key_char = 0,
+                    .modifiers = 0,
+            };
+            break;
+        case KEY_DOWN:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::DOWN,
+                    .key_char = 0,
+                    .modifiers = 0,
+            };
+            break;
+        case KEY_HOME:
+        case KEY_SHOME:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::HOME,
+                    .key_char = 0,
+                    .modifiers = static_cast<uint8_t>(c == KEY_SHOME ? KEY_SHIFT : 0),
+            };
+            break;
+        case KEY_END:
+        case KEY_SEND:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::END,
+                    .key_char = 0,
+                    .modifiers = static_cast<uint8_t>(c == KEY_SEND ? KEY_SHIFT : 0),
+            };
+            break;
+        case KEY_NPAGE:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::PAGE_UP,
+                    .key_char = 0,
+                    .modifiers = 0,
+            };
+            break;
+        case KEY_PPAGE:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::PAGE_DOWN,
+                    .key_char = 0,
+                    .modifiers = 0,
+            };
+            break;
+        case KEY_BTAB:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::TAB,
+                    .key_char = 0,
+                    .modifiers = 0,
+            };
+            break;
+        case KEY_IC:
+        case KEY_SIC:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::INSERT,
+                    .key_char = 0,
+                    .modifiers = static_cast<uint8_t>(c == KEY_SIC ? KEY_SHIFT : 0),
+            };
+            break;
+        case KEY_DC:
+        case KEY_SDC:
+            event = KeyEvent{
+                    .key_down = true,
+                    .key_code = KeyCode::DELETE,
+                    .key_char = 0,
+                    .modifiers = static_cast<uint8_t>(c == KEY_SDC ? KEY_SHIFT : 0),
+            };
+            break;
+        case KEY_RESIZE:
+            event = ResizeEvent{
+                    .size = {.width = static_cast<size_t>(COLS), .height = static_cast<size_t>(LINES)}
+            };
+            break;
+        case KEY_MOUSE: {
+            MEVENT ev;
+            if (getmouse(&ev) == ERR)
+                return false;
+            MouseEventKind kind = MouseEventKind::MOVED;
+            MouseButton button = MouseButton::NONE;
+            Position pos{
+                    .x = static_cast<size_t>(ev.x),
+                    .y = static_cast<size_t>(ev.y),
+            };
+            uint8_t modifiers = 0;
+
+            if (ev.bstate & BUTTON1_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::LEFT;
+            }
+            if (ev.bstate & BUTTON1_DOUBLE_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::LEFT;
+            }
+
+            if (ev.bstate & BUTTON2_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::MIDDLE;
+            }
+            if (ev.bstate & BUTTON2_DOUBLE_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::MIDDLE;
+            }
+
+            if (ev.bstate & BUTTON3_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::MIDDLE;
+            }
+            if (ev.bstate & BUTTON3_DOUBLE_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::MIDDLE;
+            }
+
+            if (ev.bstate & BUTTON4_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::MIDDLE;
+            }
+            if (ev.bstate & BUTTON4_DOUBLE_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::MIDDLE;
+            }
+
+            if (ev.bstate & BUTTON5_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::RIGHT;
+            }
+            if (ev.bstate & BUTTON5_DOUBLE_CLICKED) {
+                kind = MouseEventKind::CLICK;
+                button = MouseButton::RIGHT;
+            }
+
+            if (ev.bstate & BUTTON_SHIFT)
+                modifiers |= KEY_SHIFT;
+            if (ev.bstate & BUTTON_CTRL)
+                modifiers |= KEY_CTRL;
+            if (ev.bstate & BUTTON_ALT)
+                modifiers |= KEY_ALT;
+
+            if (ev.bstate & REPORT_MOUSE_POSITION) {
+                kind = MouseEventKind::MOVED;
+                button = MouseButton::NONE;
+            }
+
+            event = MouseEvent{
+                    .kind = kind,
+                    .button = button,
+                    .pos = pos,
+                    .modifiers = modifiers,
+            };
+            break;
+        }
+        default:
+            if (KEY_F(1) <= c && c <= KEY_F(24)) {
+                const KeyCode key_code = static_cast<KeyCode>(static_cast<int>(KeyCode::F1) + c - KEY_F(1));
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = key_code,
+                        .key_char = 0,
+                        .modifiers = 0,
+                };
+            } else if (KeyCode key_code; get_key_code(static_cast<char>(c), key_code)) {
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = key_code,
+                        .key_char = static_cast<char>(c),
+                        .modifiers = 0,
+                };
+            } else
+                return false;
+            break;
+        }
+
+        if (const auto key_event = std::get_if<KeyEvent>(&event)) {
+            KeyEvent release_ev = *key_event;
+            release_ev.key_down = false;
+            pending_events.push_back(release_ev);
+        }
+
+        return true;
+    }
+
+    Result get_key_code(char c, KeyCode &key_code) {
+        switch (c) {
+        case '\b':
+            key_code = KeyCode::BACKSPACE;
+            return true;
+        case '\r':
+        case '\n':
+            key_code = KeyCode::ENTER;
+            return true;
+        case '\t':
+            key_code = KeyCode::TAB;
+            return true;
+        case '\x7f':
+            key_code = KeyCode::ESCAPE;
+            return true;
+        case '\x1b':
+            key_code = KeyCode::ESCAPE;
+            return true;
+        case ' ':
+            key_code = KeyCode::SPACE;
+            return true;
+        case '!':
+            key_code = KeyCode::BANG;
+            return true;
+        case '@':
+            key_code = KeyCode::AT;
+            return true;
+        case '#':
+            key_code = KeyCode::HASH;
+            return true;
+        case '$':
+            key_code = KeyCode::DOLLAR;
+            return true;
+        case '%':
+            key_code = KeyCode::PERCENT;
+            return true;
+        case '^':
+            key_code = KeyCode::CARET;
+            return true;
+        case '&':
+            key_code = KeyCode::AMPERSAND;
+            return true;
+        case '*':
+            key_code = KeyCode::ASTERISK;
+            return true;
+        case '(':
+            key_code = KeyCode::LPAREN;
+            return true;
+        case ')':
+            key_code = KeyCode::RPAREN;
+            return true;
+        case '_':
+            key_code = KeyCode::UNDERSCORE;
+            return true;
+        case '+':
+            key_code = KeyCode::PLUS;
+            return true;
+        case '-':
+            key_code = KeyCode::MINUS;
+            return true;
+        case '=':
+            key_code = KeyCode::EQUAL;
+            return true;
+        case '{':
+            key_code = KeyCode::LBRACE;
+            return true;
+        case '}':
+            key_code = KeyCode::RBRACE;
+            return true;
+        case '[':
+            key_code = KeyCode::LBRACKET;
+            return true;
+        case ']':
+            key_code = KeyCode::RBRACKET;
+            return true;
+        case '|':
+            key_code = KeyCode::PIPE;
+            return true;
+        case '\\':
+            key_code = KeyCode::BACKSLASH;
+            return true;
+        case ':':
+            key_code = KeyCode::COLON;
+            return true;
+        case '"':
+            key_code = KeyCode::DQUOTE;
+            return true;
+        case ';':
+            key_code = KeyCode::SEMICOLON;
+            return true;
+        case '\'':
+            key_code = KeyCode::SQUOTE;
+            return true;
+        case '<':
+            key_code = KeyCode::LESS;
+            return true;
+        case '>':
+            key_code = KeyCode::GREATER;
+            return true;
+        case '?':
+            key_code = KeyCode::HOOK;
+            return true;
+        case ',':
+            key_code = KeyCode::COMMA;
+            return true;
+        case '.':
+            key_code = KeyCode::PERIOD;
+            return true;
+        case '/':
+            key_code = KeyCode::SLASH;
+            return true;
+        case '`':
+            key_code = KeyCode::BQUOTE;
+            return true;
+        case '~':
+            key_code = KeyCode::TILDE;
+            return true;
+        default:
+            if ('a' <= c && c <= 'z') {
+                key_code = static_cast<KeyCode>(c - 'a' + static_cast<int>(KeyCode::K_A));
+                return true;
+            } else if ('A' <= c && c <= 'Z') {
+                key_code = static_cast<KeyCode>(c - 'A' + static_cast<int>(KeyCode::K_A));
+                return true;
+            } else if ('0' <= c && c <= '9') {
+                key_code = static_cast<KeyCode>(c - '0' + static_cast<int>(KeyCode::K_0));
+                return true;
+            }
+        }
+        return std::format("key not supported: 0x{:x}", c);
+    }
+}    // namespace nite::internal
+
+#    else
+
+#        include <bits/types/struct_timeval.h>
+#        include <sys/ioctl.h>
+#        include <sys/select.h>
+#        include <sys/types.h>
+#        include <termios.h>
+#        include <unistd.h>
 
 namespace nite::internal::console
 {
@@ -2614,9 +3066,6 @@ namespace nite::internal::console
     }
 }    // namespace nite::internal::console
 
-#endif
-
-#ifdef OS_LINUX
 namespace nite::internal
 {
     Result get_key_code(char c, KeyCode &key_code);
@@ -2658,7 +3107,7 @@ namespace nite::internal
     // NUMBER   := DIGIT+
     // -------------------------------------------------------------------
 
-#    define PARSER_TERMINATOR '\n'
+#        define PARSER_TERMINATOR '\n'
 
     class Parser {
         size_t index = 0;
@@ -2776,7 +3225,7 @@ namespace nite::internal
         // 0x09         -> Tab
         // any printable char
         Result parse_key_and_focus(Event &event) {
-            if (peek() != ESC) {
+            if (peek() != *ESC) {
                 switch (advance()) {
                 case 0x0d:
                     event = KeyEvent{
@@ -2820,7 +3269,7 @@ namespace nite::internal
                 event = KeyEvent{
                         .key_down = true,
                         .key_code = KeyCode::ESCAPE,
-                        .key_char = ESC,
+                        .key_char = *ESC,
                         .modifiers = 0,
                 };
                 return true;
@@ -2854,7 +3303,7 @@ namespace nite::internal
             if (match(';')) {
                 // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#modifiers
                 if (uint8_t val; match_number(val))
-                    key_modifiers = saturated_sub(val, 1);
+                    key_modifiers = saturated_sub(val, static_cast<uint8_t>(1));
             }
 
             char functional;
@@ -3090,7 +3539,7 @@ namespace nite::internal
         }
 
         Result expect_csi() {
-            if (peek() == ESC && peek(1) == '[') {
+            if (peek() == *ESC && peek(1) == '[') {
                 advance();
                 advance();
                 return true;
@@ -3190,7 +3639,7 @@ namespace nite::internal
     bool PollRawEvent(Event &event) {
         static std::vector<Event> pending_events = []() {
             // See: man 2 sigaction
-            static struct sigaction sa{};
+            static struct sigaction sa {};
             sa.sa_flags = 0;
             sigemptyset(&sa.sa_mask);
             sa.sa_handler = [](int) { pending_events.push_back(ResizeEvent{GetWindowSize()}); };
@@ -3347,4 +3796,6 @@ namespace nite::internal
         return std::format("key not supported: 0x{:x}", c);
     }
 }    // namespace nite::internal
+
+#    endif
 #endif

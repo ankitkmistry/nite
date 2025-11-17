@@ -1586,7 +1586,7 @@ namespace nite
         }
 
         void on_key_delete() {
-            if (0 <= cursor && cursor <= data.size() - 1)
+            if (cursor <= data.size() - 1)
                 data.erase(cursor, 1);
         }
 

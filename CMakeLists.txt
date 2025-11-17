@@ -26,12 +26,22 @@ if (MSVC)
 else ()
     # additional warnings
     target_compile_options (nite PRIVATE
-        -Wall 
-        -Wextra 
-        -Wunused 
-        -Wunused-parameter 
+        -Wall
+        -Wextra
+        -Wunused
+        -Wunused-parameter
         -march=native
     )
+endif ()
+
+# Link with ncurses when NITE_USE_NCURSES is enabled
+if (NITE_USE_NCURSES)
+    find_package (Curses REQUIRED)
+    target_link_libraries (nite PRIVATE ${CURSES_LIBRARIES})
+
+    if (DEFINED CURSES_INCLUDE_DIRS)
+        target_include_directories (nite PRIVATE ${CURSES_INCLUDE_DIRS})
+    endif ()
 endif ()
 
 # Add tests and install targets if needed.

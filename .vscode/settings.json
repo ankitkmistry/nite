@@ -1,0 +1,5 @@
+// {
+//     "cmake.configureArgs": [
+//         "-DNITE_USE_NCURSES:BOOL=TRUE"
+//     ]
+// }
