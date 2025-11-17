@@ -558,9 +558,9 @@ int main() {
 
             HandleEvent(event, [&](const KeyEvent &ev) {
                 if (ev.key_down && ev.modifiers == 0) {
-                    if (ev.key_code == KeyCode::ESCAPE)
+                    if (ev.key_code == KeyCode::K_Q && (ev.modifiers & KEY_CTRL) != 0)
                         CloseWindow(state);
-                    if (ev.key_code == KeyCode::ENTER)
+                    if (ev.key_code == KeyCode::K_L && (ev.modifiers & KEY_CTRL) != 0)
                         align++;
                 }
             });

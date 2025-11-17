@@ -934,7 +934,6 @@ namespace nite
         // Split lines
         for (size_t start = 0, i = 0; i <= info.text.size(); i++) {
             if (i == info.text.size() || info.text[i] == '\n') {
-                // std::string line(info.text.begin() + start, info.text.begin() + i);
                 auto line = info.text.substr(start, i - start);
                 if (info.wrap)
                     for (size_t i = 0; i < line.size(); i += info.size.width)
@@ -1121,12 +1120,17 @@ namespace nite
         std::vector<std::vector<StyledChar>> lines;
         for (size_t start = 0, i = 0; i <= info.text.size(); i++) {
             if (i == info.text.size() || info.text[i].value == '\n') {
-                std::vector<StyledChar> line(info.text.begin() + start, info.text.begin() + i);
-                if (info.wrap) {
-                    for (size_t i = 0; i < line.size(); i += info.size.width)
-                        lines.emplace_back(line.begin() + i, line.begin() + std::min(line.size(), i + info.size.width));
-                } else
-                    lines.push_back(std::move(line));
+                if (start == i) {
+                    if (i != info.text.size())
+                        lines.emplace_back();
+                } else {
+                    std::vector<StyledChar> line(info.text.begin() + start, info.text.begin() + i);
+                    if (info.wrap) {
+                        for (size_t i = 0; i < line.size(); i += info.size.width)
+                            lines.emplace_back(line.begin() + i, line.begin() + std::min(line.size(), i + info.size.width));
+                    } else
+                        lines.push_back(std::move(line));
+                }
                 start = i + 1;
             }
         }
@@ -1591,14 +1595,19 @@ namespace nite
                     if (ev.modifiers == 0)
                         text_state.toggle_insert_mode();
                     break;
-                default:
-                    // FIXME: Fix Enter key
-                    if (info.handle_enter_as_event && ev.key_code == KeyCode::ENTER) {
+                case KeyCode::ENTER:
+                    if (info.handle_enter_as_event) {
                         if (info.on_enter)
                             info.on_enter(std::forward<TextInputInfo &>(info));
-                        break;
+                    } else if (ev.modifiers == 0) {
+                        if (text_state.is_selected()) {
+                            text_state.erase_selection();
+                            text_state.end_selection();
+                        }
+                        text_state.insert_char('\n');
                     }
-
+                    break;
+                default:
                     if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
                         if (text_state.is_selected()) {
                             text_state.erase_selection();

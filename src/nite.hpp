@@ -1605,11 +1605,13 @@ namespace nite
         }
 
         void go_home() {
-            cursor = 0;
+            const auto idx = data.substr(0, cursor).find_last_of('\n');
+            cursor = cursor == std::string::npos ? 0 : idx + 1;
         }
 
         void go_end() {
-            cursor = data.size();
+            const auto idx = data.substr(cursor).find_first_of('\n');
+            cursor = idx == std::string::npos ? data.size() : idx + cursor;
         }
 
         void toggle_insert_mode() {
