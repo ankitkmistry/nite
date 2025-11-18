@@ -15,7 +15,6 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <variant>
 #include <vector>
 #include <wchar.h>
 
@@ -755,10 +754,12 @@ namespace nite
         if (mouse_pos == home_cell_btn && (IsMouseClicked(state, MouseButton::LEFT) || IsMouseDoubleClicked(state, MouseButton::LEFT)))
             pivot = {};
 
-        state.impl->selected_stack.push(std::make_unique<internal::ScrollBox>(
-                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, state.impl->get_selected().get_pos() + info.pos,
-                pivot, info.min_size, info.max_size
-        ));
+        state.impl->selected_stack.push(
+                std::make_unique<internal::ScrollBox>(
+                        info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar,
+                        state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
+                )
+        );
     }
 
     void BeginGridPane(State &state, GridPaneInfo info) {
@@ -1562,17 +1563,11 @@ namespace nite
             list.push_back(StyledChar{.value = 'S', .style = style});
             list.push_back(StyledChar{.value = '>', .style = style});
             break;
-        case '\x09':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'H', .style = style});
-            list.push_back(StyledChar{.value = 'T', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
-            break;
-        case '\x0A':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'L', .style = style});
-            list.push_back(StyledChar{.value = 'F', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+        case '\x09': // horizontal tab
+            list.push_back(StyledChar{.value = ' ', .style = style});
+            list.push_back(StyledChar{.value = ' ', .style = style});
+            list.push_back(StyledChar{.value = ' ', .style = style});
+            list.push_back(StyledChar{.value = ' ', .style = style});
             break;
         case '\x0B':
             list.push_back(StyledChar{.value = '<', .style = style});
@@ -1719,7 +1714,7 @@ namespace nite
             list.push_back(StyledChar{.value = '>', .style = style});
             break;
         default:
-            list.push_back(StyledChar{.value = c, .style = style});
+            list.push_back(StyledChar{.value = static_cast<wchar_t>(c), .style = style});
             break;
         }
     }
@@ -2033,14 +2028,12 @@ namespace nite::internal::console
                 out += (CSI "21m");
 
             if ((style.mode & STYLE_NO_FG) == 0)
-                if (!prev_style || prev_style->fg != style.fg)
-                    // Set foreground color
-                    out += (CSI "38;2;" + std::to_string(style.fg.r) + ";" + std::to_string(style.fg.g) + ";" + std::to_string(style.fg.b) + "m");
+                // Set foreground color
+                out += (CSI "38;2;" + std::to_string(style.fg.r) + ";" + std::to_string(style.fg.g) + ";" + std::to_string(style.fg.b) + "m");
 
             if ((style.mode & STYLE_NO_BG) == 0)
-                if (!prev_style || prev_style->bg != style.bg)
-                    // Set background color
-                    out += (CSI "48;2;" + std::to_string(style.bg.r) + ";" + std::to_string(style.bg.g) + ";" + std::to_string(style.bg.b) + "m");
+                // Set background color
+                out += (CSI "48;2;" + std::to_string(style.bg.r) + ";" + std::to_string(style.bg.g) + ";" + std::to_string(style.bg.b) + "m");
 
             prev_style = style;
         }
@@ -4053,7 +4046,7 @@ namespace nite::internal
     bool PollRawEvent(Event &event) {
         static std::queue<Event> pending_events = []() {
             // See: man 2 sigaction
-            static struct sigaction sa {};
+            static struct sigaction sa{};
             sa.sa_flags = 0;
             sigemptyset(&sa.sa_mask);
             sa.sa_handler = [](int) { pending_events.push(ResizeEvent{GetWindowSize()}); };

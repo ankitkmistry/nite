@@ -442,7 +442,8 @@ int main1() {
 
 void image_test(State &state) {
     static Position scroll_pivot;
-    static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 6, 10);
+    static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 3, 5);
+    // static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 6, 10);
     // static ImageView image = down_scale(load_image("../res/musashi.jpg"), 6, 10);
 
     Event event;
@@ -468,7 +469,7 @@ void image_test(State &state) {
         .max_size = max_size,
         .scroll_bar = SCROLL_LIGHT,
         .scroll_factor = 2,
-        .show_hscroll_bar = false,
+        .show_hscroll_bar = true,
     }); {
         for (size_t y = 0; y < image.get_height(); y++)
             for (size_t x = 0; x < image.get_width(); x++)
@@ -540,7 +541,7 @@ void input_test(State &state){
 
         HandleEvent(event, [&](const KeyEvent &ev) {
             if (ev.key_down && ev.modifiers == 0) {
-                if (ev.key_code == KeyCode::F1 && ev.modifiers == 0)
+                if (ev.key_code == KeyCode::F4 && ev.modifiers == 0)
                     CloseWindow(state);
                 if (ev.key_code == KeyCode::F2 && ev.modifiers == 0)
                     align++;
@@ -568,7 +569,7 @@ int main() {
     Initialize(state);
 
     while (!ShouldWindowClose(state)) {
-        input_test(state);
+        image_test(state);
     }
 
     Cleanup();
