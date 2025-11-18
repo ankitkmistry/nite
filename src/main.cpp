@@ -16,14 +16,6 @@
 
 using namespace nite;
 
-template<class... Ts>
-struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-// Some compilers might require this explicit deduction guide
-template<class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-
 std::string btn_str(MouseButton btn) {
     switch (btn) {
     case MouseButton::NONE:
@@ -72,7 +64,7 @@ void hello_test(State &state) {
     static Position scroll_pivot;
     Event event;
     while (PollEvent(state, event)) {
-        std::visit(overloaded {
+        HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
                     if (std::isprint(ev.key_char))
@@ -102,9 +94,8 @@ void hello_test(State &state) {
                 default:
                     break;
                 }
-            },
-            [&](const auto &) {},
-        }, event);
+            }
+        );
     }
 
     BeginDrawing(state);
@@ -165,14 +156,13 @@ void grid_test(State &state) {
 
     Event event;
     while (PollEvent(state, event)) {
-        std::visit(overloaded {
+        HandleEvent(event, 
             [&](const KeyEvent &ev) {
                 if (ev.key_down)
                     if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
                         CloseWindow(state);
-            },
-            [&](const auto &) {},
-        }, event);
+            }
+        );
     }
 
     BeginDrawing(state);
@@ -270,7 +260,7 @@ void linux_test(State &state) {
 
     Event event;
     while (PollEvent(state, event)) {
-        std::visit(overloaded {
+        HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
                     if (ev.key_code == KeyCode::K_C && ev.modifiers == 0)
@@ -331,9 +321,8 @@ void linux_test(State &state) {
             },
             [&](const DebugEvent &ev) {
                 lines.push_back(ev.text);
-            },
-            [&](const auto &) {},
-        }, event);
+            }
+        );
     }
     
     BeginDrawing(state);
@@ -346,6 +335,7 @@ void linux_test(State &state) {
         .pos = {.col = 0,.row = 1},
         .min_size = {.width = size.width, .height = size.height - 1},
         .max_size = {.width = size.width * 2, .height = size.height * 2},
+        .scroll_bar = SCROLL_DASHED,
         .scroll_factor = 2,
     }); {
         size_t i = lines.size() < size.height - 1 ? 0 : lines.size() - (size.height - 1);
@@ -457,15 +447,14 @@ void image_test(State &state) {
 
     Event event;
     while (PollEvent(state, event)) {
-        std::visit(overloaded {
+        HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
                     if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
                         CloseWindow(state);
                 }
-            },
-            [](const auto &) {},
-        }, event);
+            }
+        );
     }
 
     BeginDrawing(state);
@@ -501,7 +490,7 @@ void align_test(State &state) {
 
     Event event;
     while (PollEvent(state, event)) {
-        std::visit(overloaded {
+        HandleEvent(event, 
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
                     if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
@@ -509,9 +498,8 @@ void align_test(State &state) {
                     if (ev.key_code == KeyCode::ENTER && ev.modifiers == 0)
                         align++;
                 }
-            },
-            [](const auto &) {},
-        }, event);
+            }
+        );
     }
 
     if (value > 1)
@@ -542,42 +530,43 @@ void align_test(State &state) {
     EndDrawing(state);
 }
 
+void input_test(State &state){
+    static size_t align = 0;
+    static TextInputState text_state;
+
+    Event event;
+    while (PollEvent(state, event)) {
+        text_state.capture_event(event);
+
+        HandleEvent(event, [&](const KeyEvent &ev) {
+            if (ev.key_down && ev.modifiers == 0) {
+                if (ev.key_code == KeyCode::K_Q && (ev.modifiers & KEY_CTRL) != 0)
+                    CloseWindow(state);
+                if (ev.key_code == KeyCode::K_L && (ev.modifiers & KEY_CTRL) != 0)
+                    align++;
+            }
+        });
+    }
+
+    BeginDrawing(state);
+
+    TextInput(state, text_state, {
+        .pos = {.col = 0, .row = 0},
+        .size = GetPaneSize(state),
+        .align = static_cast<Align>(align % 9),
+    });
+
+    EndDrawing(state);
+}
+
 // clang-format on
 
 int main() {
     auto &state = GetState();
     Initialize(state);
 
-    size_t align = 0;
-    TextInputState text_state;
-
     while (!ShouldWindowClose(state)) {
-        Event event;
-        while (PollEvent(state, event)) {
-            text_state.capture_event(event);
-
-            HandleEvent(event, [&](const KeyEvent &ev) {
-                if (ev.key_down && ev.modifiers == 0) {
-                    if (ev.key_code == KeyCode::K_Q && (ev.modifiers & KEY_CTRL) != 0)
-                        CloseWindow(state);
-                    if (ev.key_code == KeyCode::K_L && (ev.modifiers & KEY_CTRL) != 0)
-                        align++;
-                }
-            });
-        }
-
-        BeginDrawing(state);
-
-        TextInput(
-                state, text_state,
-                {
-                        .pos = {.col = 0, .row = 0},
-                        .size = GetPaneSize(state),
-                        .align = static_cast<Align>(align % 9),
-        }
-        );
-
-        EndDrawing(state);
+        linux_test(state);
     }
 
     Cleanup();

@@ -83,6 +83,17 @@ static inline constexpr bool is_print(char c) {
     return 32 <= c && c <= 126;
 }
 
+// static std::string get_printable_str(const std::string &str) {
+//     std::string result;
+//     for (const char c: str) {
+//         if (c == *ESC)
+//             result += "ESC";
+//         else
+//             result.push_back(c);
+//     }
+//     return result;
+// }
+
 template<std::unsigned_integral Integer>
 static inline constexpr Integer saturated_sub(Integer a, Integer b) {
     if (a >= b)
@@ -2503,7 +2514,7 @@ namespace nite::internal
 // ----------------------------------------------------------------------------------------------------
 // 1. It does not have any  support for Escape key
 // 2. It does not have good support for modifier key: Shift+Key
-// 3. It does not have any  support for modifier keys: Ctrl+Key, Ctrl+Shift+Key, Ctrl+Shift+Alt+Key, 
+// 3. It does not have any  support for modifier keys: Ctrl+Key, Ctrl+Shift+Key, Ctrl+Shift+Alt+Key,
 //                                                     Shift+Alt+Key, Ctrl+Alt+Key, Alt+Key
 // 4. It does not have any  support for mouse scroll: up, down, left, right
 // 5. There is no way to figure out what kind of error occured if any operation fails
@@ -2957,6 +2968,7 @@ namespace nite::internal
 #        include <termios.h>
 #        include <unistd.h>
 
+// strace ./nite -C -O -U
 namespace nite::internal::console
 {
     inline static std::string get_last_error() {
@@ -3022,9 +3034,10 @@ namespace nite::internal::console
         // Enable kitty keyboard protocol
         // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
         // flags = 1 | 4 = 5
+        //       = `Disambiguate escape codes` and `Report alternate keys`
         $(print(CSI ">5u"));
 
-        $(print(CSI "?1039h"));    // Send ESC when Alt modifies a key
+        // $(print(CSI "?1039h"));    // Send ESC when Alt modifies a key
 
         // Mouse specific
         $(print(CSI "?1000h"));    // Send Mouse X & Y on button press and release
@@ -3048,7 +3061,7 @@ namespace nite::internal::console
         $(print(CSI "?1002l"));    // Do not use Cell Motion Mouse Tracking (move and drag tracking)
         $(print(CSI "?1000l"));    // Do not send Mouse X & Y on button press and release
         // Keyboard specific
-        $(print(CSI "?1039h"));    // Do not Send ESC when Alt modifies a key
+        // $(print(CSI "?1039h"));    // Do not Send ESC when Alt modifies a key
 
         // Disable kitty keyboard protocol
         $(print(CSI "<u"));
@@ -3114,7 +3127,7 @@ namespace nite::internal
         std::string text;
 
         // Previous mouse click time point
-        inline static auto prev_mcl_tp = std::chrono::high_resolution_clock::time_point();
+        std::chrono::high_resolution_clock::time_point prev_mcl_tp = std::chrono::high_resolution_clock::time_point();
 
         Result parse_mouse(Event &event) {
             const auto mev_tp = std::chrono::high_resolution_clock::now();
@@ -3225,47 +3238,393 @@ namespace nite::internal
         // 0x09         -> Tab
         // any printable char
         Result parse_key_and_focus(Event &event) {
-            if (peek() != *ESC) {
+            switch (advance()) {
+            case 0x0d:    // Enter key
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = KeyCode::ENTER,
+                        .key_char = current(),
+                        .modifiers = 0,
+                };
+                return true;
+            case 0x7f:
+            case 0x08:    // Backspace key
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = KeyCode::BACKSPACE,
+                        .key_char = current(),
+                        .modifiers = 0,
+                };
+                return true;
+            case 0x09:    // Tab key
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = KeyCode::TAB,
+                        .key_char = current(),
+                        .modifiers = 0,
+                };
+                return true;
+            case *ESC: {
+                $(expect('['));    // Now we are past the CSI
+
+                if (match('O')) {
+                    event = FocusEvent{.focus_gained = false};
+                    return true;
+                } else if (match('I')) {
+                    event = FocusEvent{.focus_gained = true};
+                    return true;
+                }
+
+                int key_val_unsh = 0;              // unshifted key val
+                std::optional<char> key_val_sh;    // shifted key val
+                std::optional<uint8_t> key_modifiers;
+                char functional;
+
+                $(expect_number(key_val_unsh));
+
+                if (match(':')) {
+                    if (uint8_t val; match_number(val))
+                        key_val_sh = val;
+                    if (match(':')) {
+                        size_t val;
+                        match_number(val);    // base layout key (ignored)
+                    }
+                }
+
+                if (match(';'))
+                    // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#modifiers
+                    if (uint8_t val; match_number(val))
+                        key_modifiers = saturated_sub(val, static_cast<uint8_t>(1));
+
+                if (match_any('A', 'B', 'C', 'D', 'E', 'F', 'H', 'P', 'Q', 'S', 'u', '~'))
+                    functional = current();
+                else
+                    return "expected one of 'ABCDEFHPQSu~'";
+
+                KeyEvent kev;
+
+                if (key_val_sh) {
+                    kev.key_char = *key_val_sh;
+                    $(get_key_code(kev.key_char, kev.key_code));
+                } else {
+                    if (key_val_unsh == 1) {
+                        switch (functional) {
+                        case 'A':
+                            kev.key_code = KeyCode::UP;
+                            break;
+                        case 'B':
+                            kev.key_code = KeyCode::DOWN;
+                            break;
+                        case 'C':
+                            kev.key_code = KeyCode::RIGHT;
+                            break;
+                        case 'D':
+                            kev.key_code = KeyCode::LEFT;
+                            break;
+                        case 'F':
+                            kev.key_code = KeyCode::END;
+                            break;
+                        case 'H':
+                            kev.key_code = KeyCode::HOME;
+                            break;
+                        case 'P':
+                            kev.key_code = KeyCode::F1;
+                            break;
+                        case 'Q':
+                            kev.key_code = KeyCode::F2;
+                            break;
+                        case 'S':
+                            kev.key_code = KeyCode::F4;
+                            break;
+                        default:
+                            return "key not supported";
+                        }
+                    } else if (functional == '~') {
+                        switch (key_val_unsh) {
+                        case 1:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::HOME;
+                            break;
+                        case 2:
+                            kev.key_code = KeyCode::INSERT;
+                            break;
+                        case 3:
+                            kev.key_code = KeyCode::DELETE;
+                            break;
+                        case 5:
+                            kev.key_code = KeyCode::PAGE_UP;
+                            break;
+                        case 6:
+                            kev.key_code = KeyCode::PAGE_DOWN;
+                            break;
+                        case 7:
+                            kev.key_code = KeyCode::HOME;
+                            break;
+                        case 8:
+                            kev.key_code = KeyCode::END;
+                            break;
+                        case 11:
+                            kev.key_code = KeyCode::F1;
+                            break;
+                        case 12:
+                            kev.key_code = KeyCode::F2;
+                            break;
+                        case 13:
+                            kev.key_code = KeyCode::F3;
+                            break;
+                        case 14:
+                            kev.key_code = KeyCode::F4;
+                            break;
+                        case 15:
+                            kev.key_code = KeyCode::F5;
+                            break;
+                        case 17:
+                            kev.key_code = KeyCode::F6;
+                            break;
+                        case 18:
+                            kev.key_code = KeyCode::F7;
+                            break;
+                        case 19:
+                            kev.key_code = KeyCode::F8;
+                            break;
+                        case 20:
+                            kev.key_code = KeyCode::F9;
+                            break;
+                        case 21:
+                            kev.key_code = KeyCode::F10;
+                            break;
+                        case 23:
+                            kev.key_code = KeyCode::F11;
+                            break;
+                        case 24:
+                            kev.key_code = KeyCode::F12;
+                            break;
+                        case 25:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::F13;
+                            break;
+                        case 26:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::F14;
+                            break;
+                        case 28:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::F15;
+                            break;
+                        case 29:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::F16;
+                            break;
+                        case 31:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::F17;
+                            break;
+                        case 32:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::F18;
+                            break;
+                        case 33:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::F19;
+                            break;
+                        case 34:
+                            // VT220 supports this
+                            kev.key_code = KeyCode::F20;
+                            break;
+                        default:
+                            return "key not supported";
+                        }
+                    } else if (functional == 'u') {
+                        switch (key_val_unsh) {
+                        case 9:
+                            kev.key_code = KeyCode::TAB;
+                            break;
+                        case 13:
+                            kev.key_code = KeyCode::ENTER;
+                            break;
+                        case 27:
+                            kev.key_code = KeyCode::ESCAPE;
+                            break;
+                        case 127:
+                            kev.key_code = KeyCode::BACKSPACE;
+                            break;
+                        case 57376:
+                            kev.key_code = KeyCode::F13;
+                            break;
+                        case 57377:
+                            kev.key_code = KeyCode::F14;
+                            break;
+                        case 57378:
+                            kev.key_code = KeyCode::F15;
+                            break;
+                        case 57379:
+                            kev.key_code = KeyCode::F16;
+                            break;
+                        case 57380:
+                            kev.key_code = KeyCode::F17;
+                            break;
+                        case 57381:
+                            kev.key_code = KeyCode::F18;
+                            break;
+                        case 57382:
+                            kev.key_code = KeyCode::F19;
+                            break;
+                        case 57383:
+                            kev.key_code = KeyCode::F20;
+                            break;
+                        case 57384:
+                            kev.key_code = KeyCode::F21;
+                            break;
+                        case 57385:
+                            kev.key_code = KeyCode::F22;
+                            break;
+                        case 57386:
+                            kev.key_code = KeyCode::F23;
+                            break;
+                        case 57387:
+                            kev.key_code = KeyCode::F24;
+                            break;
+                        case 57417:
+                            kev.key_code = KeyCode::LEFT;
+                            break;
+                        case 57418:
+                            kev.key_code = KeyCode::RIGHT;
+                            break;
+                        case 57419:
+                            kev.key_code = KeyCode::UP;
+                            break;
+                        case 57420:
+                            kev.key_code = KeyCode::DOWN;
+                            break;
+                        case 57421:
+                            kev.key_code = KeyCode::PAGE_UP;
+                            break;
+                        case 57422:
+                            kev.key_code = KeyCode::PAGE_DOWN;
+                            break;
+                        case 57423:
+                            kev.key_code = KeyCode::HOME;
+                            break;
+                        case 57424:
+                            kev.key_code = KeyCode::END;
+                            break;
+                        case 57425:
+                            kev.key_code = KeyCode::INSERT;
+                            break;
+                        case 57426:
+                            kev.key_code = KeyCode::DELETE;
+                            break;
+                        default:
+                            kev.key_char = static_cast<char>(key_val_unsh);
+                            $(get_key_code(kev.key_char, kev.key_code));
+                            break;
+                        }
+                    } else {
+                        kev.key_char = static_cast<char>(key_val_unsh);
+                        $(get_key_code(kev.key_char, kev.key_code));
+                    }
+                }
+
+                if (key_modifiers) {
+                    const auto val = *key_modifiers;
+                    if (val & 0b0000'0001)
+                        kev.modifiers |= KEY_SHIFT;
+                    if (val & 0b0000'0010)
+                        kev.modifiers |= KEY_ALT;
+                    if (val & 0b0000'0100)
+                        kev.modifiers |= KEY_CTRL;
+                    if (val & 0b0000'1000)
+                        kev.modifiers |= KEY_SUPER;
+                    if (val & 0b0010'0000)
+                        kev.modifiers |= KEY_META;
+                }
+
+                event = kev;
+                return true;
+            }
+            default: {
+                KeyCode key_code;
+                $(get_key_code(current(), key_code));
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = key_code,
+                        .key_char = current(),
+                        .modifiers = 0,
+                };
+                return true;
+            }
+            }
+        }
+
+        // CSI [ABCDHF]
+        // ESC 'O' [PQRS]
+        Result parse_key_legacy(Event &event) {
+            // TODO: implement all legacy key codes
+            $(expect(*ESC));
+
+            if (match('O')) {
+                KeyCode key_code;
                 switch (advance()) {
-                case 0x0d:
-                    event = KeyEvent{
-                            .key_down = true,
-                            .key_code = KeyCode::ENTER,
-                            .key_char = current(),
-                            .modifiers = 0,
-                    };
-                    return true;
-                case 0x7f:
-                case 0x08:
-                    event = KeyEvent{
-                            .key_down = true,
-                            .key_code = KeyCode::BACKSPACE,
-                            .key_char = current(),
-                            .modifiers = 0,
-                    };
-                    return true;
-                case 0x09:
-                    event = KeyEvent{
-                            .key_down = true,
-                            .key_code = KeyCode::TAB,
-                            .key_char = current(),
-                            .modifiers = 0,
-                    };
-                    return true;
-                default: {
-                    KeyCode key_code;
-                    $(get_key_code(current(), key_code));
-                    event = KeyEvent{
-                            .key_down = true,
-                            .key_code = key_code,
-                            .key_char = current(),
-                            .modifiers = 0,
-                    };
-                    return true;
+                case 'P':
+                    key_code = KeyCode::F1;
+                    break;
+                case 'Q':
+                    key_code = KeyCode::F2;
+                    break;
+                case 'R':
+                    key_code = KeyCode::F3;
+                    break;
+                case 'S':
+                    key_code = KeyCode::F4;
+                    break;
+                default:
+                    return "key not supported";
                 }
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = key_code,
+                        .key_char = 0,
+                        .modifiers = 0,
+                };
+                return true;
+            } else if (match('[')) {
+                KeyCode key_code;
+                switch (advance()) {
+                case 'A':
+                    key_code = KeyCode::UP;
+                    break;
+                case 'B':
+                    key_code = KeyCode::DOWN;
+                    break;
+                case 'C':
+                    key_code = KeyCode::RIGHT;
+                    break;
+                case 'D':
+                    key_code = KeyCode::LEFT;
+                    break;
+                case 'H':
+                    key_code = KeyCode::HOME;
+                    break;
+                case 'F':
+                    key_code = KeyCode::END;
+                    break;
+                default:
+                    return "key not supported";
                 }
-            } else if (peek(1) != '[') {
-                advance();
+                event = KeyEvent{
+                        .key_down = true,
+                        .key_code = key_code,
+                        .key_char = 0,
+                        .modifiers = 0,
+                };
+                return true;
+            }
+
+            return "key not supported";
+        }
+
+        bool parse(Event &event) {
+            if (text == ESC) {
                 event = KeyEvent{
                         .key_down = true,
                         .key_code = KeyCode::ESCAPE,
@@ -3275,265 +3634,16 @@ namespace nite::internal
                 return true;
             }
 
-            int key_val_unsh = 0;              // unshifted key val
-            std::optional<char> key_val_sh;    // shifted key val
-            std::optional<uint8_t> key_modifiers;
-
-            $(expect_csi());
-
-            if (match('O')) {
-                event = FocusEvent{.focus_gained = false};
-                return true;
-            } else if (match('I')) {
-                event = FocusEvent{.focus_gained = true};
-                return true;
-            }
-
-            $(expect_number(key_val_unsh));
-
-            if (match(':')) {
-                if (char val; match_number(val))
-                    key_val_sh = val;
-                if (match(':')) {
-                    size_t val;
-                    match_number(val);    // base layout key (ignored)
-                }
-            }
-
-            if (match(';')) {
-                // Refer to: https://sw.kovidgoyal.net/kitty/keyboard-protocol/#modifiers
-                if (uint8_t val; match_number(val))
-                    key_modifiers = saturated_sub(val, static_cast<uint8_t>(1));
-            }
-
-            char functional;
-            if (match_any('A', 'B', 'C', 'D', 'E', 'F', 'H', 'P', 'Q', 'S', 'u', '~'))
-                functional = current();
-            else
-                return "expected one of 'ABCDEFHPQSu~'";
-
-            KeyCode key_code;
-            char key_char = 0;
-            uint8_t modifiers = 0;
-
-            if (key_val_sh) {
-                key_char = *key_val_sh;
-                $(get_key_code(key_char, key_code));
-            } else {
-                const int key_val = key_val_unsh;
-                if (key_val == 1) {
-                    switch (functional) {
-                    case 'A':
-                        key_code = KeyCode::UP;
-                        break;
-                    case 'B':
-                        key_code = KeyCode::DOWN;
-                        break;
-                    case 'C':
-                        key_code = KeyCode::RIGHT;
-                        break;
-                    case 'D':
-                        key_code = KeyCode::LEFT;
-                        break;
-                    case 'F':
-                        key_code = KeyCode::END;
-                        break;
-                    case 'H':
-                        key_code = KeyCode::HOME;
-                        break;
-                    case 'P':
-                        key_code = KeyCode::F1;
-                        break;
-                    case 'Q':
-                        key_code = KeyCode::F2;
-                        break;
-                    case 'S':
-                        key_code = KeyCode::F4;
-                        break;
-                    default:
-                        return "key not supported";
-                    }
-                } else if (functional == '~') {
-                    switch (key_val) {
-                    case 2:
-                        key_code = KeyCode::INSERT;
-                        break;
-                    case 3:
-                        key_code = KeyCode::DELETE;
-                        break;
-                    case 5:
-                        key_code = KeyCode::PAGE_UP;
-                        break;
-                    case 6:
-                        key_code = KeyCode::PAGE_DOWN;
-                        break;
-                    case 7:
-                        key_code = KeyCode::HOME;
-                        break;
-                    case 8:
-                        key_code = KeyCode::END;
-                        break;
-                    case 11:
-                        key_code = KeyCode::F1;
-                        break;
-                    case 12:
-                        key_code = KeyCode::F2;
-                        break;
-                    case 13:
-                        key_code = KeyCode::F3;
-                        break;
-                    case 14:
-                        key_code = KeyCode::F4;
-                        break;
-                    case 15:
-                        key_code = KeyCode::F5;
-                        break;
-                    case 17:
-                        key_code = KeyCode::F6;
-                        break;
-                    case 18:
-                        key_code = KeyCode::F7;
-                        break;
-                    case 19:
-                        key_code = KeyCode::F8;
-                        break;
-                    case 20:
-                        key_code = KeyCode::F9;
-                        break;
-                    case 21:
-                        key_code = KeyCode::F10;
-                        break;
-                    case 23:
-                        key_code = KeyCode::F11;
-                        break;
-                    case 24:
-                        key_code = KeyCode::F12;
-                        break;
-                    default:
-                        return "key not supported";
-                    }
-                } else if (functional == 'u') {
-                    switch (key_val) {
-                    case 9:
-                        key_code = KeyCode::TAB;
-                        break;
-                    case 13:
-                        key_code = KeyCode::ENTER;
-                        break;
-                    case 27:
-                        key_code = KeyCode::ESCAPE;
-                        break;
-                    case 127:
-                        key_code = KeyCode::BACKSPACE;
-                        break;
-                    case 57376:
-                        key_code = KeyCode::F13;
-                        break;
-                    case 57377:
-                        key_code = KeyCode::F14;
-                        break;
-                    case 57378:
-                        key_code = KeyCode::F15;
-                        break;
-                    case 57379:
-                        key_code = KeyCode::F16;
-                        break;
-                    case 57380:
-                        key_code = KeyCode::F17;
-                        break;
-                    case 57381:
-                        key_code = KeyCode::F18;
-                        break;
-                    case 57382:
-                        key_code = KeyCode::F19;
-                        break;
-                    case 57383:
-                        key_code = KeyCode::F20;
-                        break;
-                    case 57384:
-                        key_code = KeyCode::F21;
-                        break;
-                    case 57385:
-                        key_code = KeyCode::F22;
-                        break;
-                    case 57386:
-                        key_code = KeyCode::F23;
-                        break;
-                    case 57387:
-                        key_code = KeyCode::F24;
-                        break;
-                    case 57417:
-                        key_code = KeyCode::LEFT;
-                        break;
-                    case 57418:
-                        key_code = KeyCode::RIGHT;
-                        break;
-                    case 57419:
-                        key_code = KeyCode::UP;
-                        break;
-                    case 57420:
-                        key_code = KeyCode::DOWN;
-                        break;
-                    case 57421:
-                        key_code = KeyCode::PAGE_UP;
-                        break;
-                    case 57422:
-                        key_code = KeyCode::PAGE_DOWN;
-                        break;
-                    case 57423:
-                        key_code = KeyCode::HOME;
-                        break;
-                    case 57424:
-                        key_code = KeyCode::END;
-                        break;
-                    case 57425:
-                        key_code = KeyCode::INSERT;
-                        break;
-                    case 57426:
-                        key_code = KeyCode::DELETE;
-                        break;
-                    default:
-                        key_char = static_cast<char>(key_val);
-                        $(get_key_code(key_char, key_code));
-                        break;
-                    }
-                } else {
-                    key_char = static_cast<char>(key_val);
-                    $(get_key_code(key_char, key_code));
-                }
-            }
-
-            if (key_modifiers) {
-                const auto val = *key_modifiers;
-                if (val & 0b0000'0001)
-                    modifiers |= KEY_SHIFT;
-                if (val & 0b0000'0010)
-                    modifiers |= KEY_ALT;
-                if (val & 0b0000'0100)
-                    modifiers |= KEY_CTRL;
-                if (val & 0b0000'1000)
-                    modifiers |= KEY_SUPER;
-                if (val & 0b0010'0000)
-                    modifiers |= KEY_META;
-            }
-
-            event = KeyEvent{
-                    .key_down = true,
-                    .key_code = key_code,
-                    .key_char = key_char,
-                    .modifiers = modifiers,
-            };
-
-            return true;
-        }
-
-        bool parse(Event &event) {
             const size_t old_index = index;
             if (parse_mouse(event))
                 return true;
 
             index = old_index;
             if (const auto result = parse_key_and_focus(event))
+                return true;
+
+            index = old_index;
+            if (const auto result = parse_key_legacy(event))
                 return true;
             return false;
         }
@@ -3626,55 +3736,50 @@ namespace nite::internal
 
         ~Parser() = default;
 
-        std::vector<Event> parse_events() {
-            std::vector<Event> events;
+        std::queue<Event> parse_events() {
+            std::queue<Event> events;
             while (index < text.size()) {
                 if (Event event; parse(event))
-                    events.push_back(event);
+                    events.push(event);
             }
             return events;
         }
     };
 
     bool PollRawEvent(Event &event) {
-        static std::vector<Event> pending_events = []() {
+        static std::queue<Event> pending_events = []() {
             // See: man 2 sigaction
             static struct sigaction sa {};
             sa.sa_flags = 0;
             sigemptyset(&sa.sa_mask);
-            sa.sa_handler = [](int) { pending_events.push_back(ResizeEvent{GetWindowSize()}); };
+            sa.sa_handler = [](int) { pending_events.push(ResizeEvent{GetWindowSize()}); };
             sigaction(SIGWINCH, &sa, NULL);
 
-            return std::vector<Event>();
+            return std::queue<Event>();
         }();
 
+        std::string text;
+        if (con_read(text)) {
+            std::queue<Event> events = Parser(text).parse_events();
+
+            while (!events.empty()) {
+                auto ev = events.front();
+                pending_events.push(ev);
+                if (const KeyEvent *kev = std::get_if<KeyEvent>(&ev)) {
+                    KeyEvent kev_release = *kev;
+                    kev_release.key_down = false;
+                    pending_events.push(kev_release);
+                }
+                events.pop();
+            }
+        }
+
         if (!pending_events.empty()) {
-            event = pending_events.back();
-            pending_events.pop_back();
+            event = pending_events.front();
+            pending_events.pop();
             return true;
         }
-
-        std::string text;
-        if (!con_read(text))
-            return false;
-
-        std::vector<Event> events = Parser(text).parse_events();
-        if (events.empty()) {
-            return false;
-            // event = DebugEvent{.text = std::format("Could not parse: {}", text)};
-            // return true;
-        }
-        event = events.front();
-        if (const KeyEvent *kev = std::get_if<KeyEvent>(&event)) {
-            KeyEvent kev_release = *kev;
-            kev_release.key_down = false;
-            pending_events.push_back(kev_release);
-        }
-        events.erase(events.begin());
-        for (const Event &event: events)
-            pending_events.push_back(event);
-
-        return true;
+        return false;
     }
 
     Result get_key_code(char c, KeyCode &key_code) {
