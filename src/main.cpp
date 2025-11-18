@@ -397,6 +397,34 @@ ImageView load_image(const char *filename) {
     return result;
 }
 
+std::array<ImageView, 3> load_image_rgb(const char *filename) {
+    int width, height, channels;
+    unsigned char *img = stbi_load(filename, &width, &height, &channels, STBI_rgb);
+    if (img == NULL) {
+        std::exit(1);
+    }
+
+    std::vector<unsigned char> red_data(width * height);
+    for (size_t i = 0, j = 0; j < static_cast<size_t>(width * height); i += 3, j++)
+        red_data[j] = img[i];
+
+    std::vector<unsigned char> green_data(width * height);
+    for (size_t i = 1, j = 0; j < static_cast<size_t>(width * height); i += 3, j++)
+        green_data[j] = img[i];
+
+    std::vector<unsigned char> blue_data(width * height);
+    for (size_t i = 2, j = 0; j < static_cast<size_t>(width * height); i += 3, j++)
+        blue_data[j] = img[i];
+
+    std::array result{
+            ImageView(red_data.data(), width, height),
+            ImageView(green_data.data(), width, height),
+            ImageView(blue_data.data(), width, height),
+    };
+    stbi_image_free(img);
+    return result;
+}
+
 void write_pgm(const ImageView &image, const char *filename) {
     std::ofstream out(filename);
     out << std::format("P2\n{} {}\n255\n", image.get_width(), image.get_height());
@@ -440,10 +468,53 @@ int main1() {
 
 // clang-format off
 
+void rgb_image_test(State &state) {
+    static Position scroll_pivot;
+
+    static auto array = load_image_rgb("../res/horn of salvation.jpg");
+    // static auto array = load_image_rgb("../res/musashi.jpg");
+    
+    static auto image_r = down_scale(array[0], 6, 10);
+    static auto image_g = down_scale(array[1], 6, 10);
+    static auto image_b = down_scale(array[2], 6, 10);
+    
+    static const Size max_size {.width = image_r.get_width(), .height = image_r.get_height()};
+
+    Event event;
+    while (PollEvent(state, event)) {
+        HandleEvent(event,
+            [&](const KeyEvent &ev) {
+                if (ev.key_down) {
+                    if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
+                        CloseWindow(state);
+                }
+            }
+        );
+    }
+
+    BeginDrawing(state);
+
+    const auto size = GetBufferSize(state);
+
+    BeginScrollPane(state, scroll_pivot, {
+        .pos = {},
+        .min_size = size,
+        .max_size = max_size,
+        .scroll_bar = SCROLL_LIGHT,
+        .scroll_factor = 2,
+        .show_hscroll_bar = true,
+    }); {
+        for (size_t y = 0; y < image_r.get_height(); y++)
+            for (size_t x = 0; x < image_r.get_width(); x++)
+                SetCell(state, ' ', {.x = x, .y = y}, {.bg = Color::from_rgb(image_r(x, y), image_g(x, y), image_b(x, y))});
+    } EndPane(state);
+
+    EndDrawing(state);
+}
+
 void image_test(State &state) {
     static Position scroll_pivot;
-    static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 3, 5);
-    // static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 6, 10);
+    static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 6, 10);
     // static ImageView image = down_scale(load_image("../res/musashi.jpg"), 6, 10);
 
     Event event;
@@ -569,7 +640,7 @@ int main() {
     Initialize(state);
 
     while (!ShouldWindowClose(state)) {
-        image_test(state);
+        rgb_image_test(state);
     }
 
     Cleanup();
