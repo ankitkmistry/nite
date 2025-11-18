@@ -1,5 +1,6 @@
 // clang-format off
 
+#include <cassert>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -8,7 +9,6 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <variant>
 #include <vector>
 #include <format>
 
@@ -335,7 +335,7 @@ void linux_test(State &state) {
         .pos = {.col = 0,.row = 1},
         .min_size = {.width = size.width, .height = size.height - 1},
         .max_size = {.width = size.width * 2, .height = size.height * 2},
-        .scroll_bar = SCROLL_DASHED,
+        .scroll_bar = SCROLL_LIGHT,
         .scroll_factor = 2,
     }); {
         size_t i = lines.size() < size.height - 1 ? 0 : lines.size() - (size.height - 1);

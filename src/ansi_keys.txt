@@ -1,3 +1,6 @@
+For linux, use this command to run:
+strace -v -s 1024 -e trace=read,write -C -o nite_trace.txt ./nite
+
 Borrowed from https://sw.kovidgoyal.net/kitty/keyboard-protocol/#functional-key-definitions
 
 UP                   | 1 A

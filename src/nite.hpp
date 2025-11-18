@@ -89,29 +89,36 @@ namespace nite
         }
     };
 
-#define COLOR_WHITE     (Color::from_hex(0xFFFFFF))
-#define COLOR_SILVER    (Color::from_hex(0xC0C0C0))
-#define COLOR_GRAY      (Color::from_hex(0x808080))
-#define COLOR_BLACK     (Color::from_hex(0x000000))
-#define COLOR_RED       (Color::from_hex(0xFF0000))
-#define COLOR_MAROON    (Color::from_hex(0x800000))
-#define COLOR_YELLOW    (Color::from_hex(0xFFFF00))
-#define COLOR_OLIVE     (Color::from_hex(0x808000))
-#define COLOR_LIME      (Color::from_hex(0x00FF00))
-#define COLOR_GREEN     (Color::from_hex(0x008000))
-#define COLOR_AQUA      (Color::from_hex(0x00FFFF))
-#define COLOR_TEAL      (Color::from_hex(0x008080))
-#define COLOR_BLUE      (Color::from_hex(0x0000FF))
-#define COLOR_NAVY      (Color::from_hex(0x000080))
-#define COLOR_FUCHSIA   (Color::from_hex(0xFF00FF))
-#define COLOR_PURPLE    (Color::from_hex(0x800080))
+#define COLOR_WHITE       (Color::from_hex(0xFFFFFF))
+#define COLOR_SILVER      (Color::from_hex(0xC0C0C0))
+#define COLOR_GRAY        (Color::from_hex(0x808080))
+#define COLOR_BLACK       (Color::from_hex(0x000000))
+#define COLOR_RED         (Color::from_hex(0xFF0000))
+#define COLOR_MAROON      (Color::from_hex(0x800000))
+#define COLOR_YELLOW      (Color::from_hex(0xFFFF00))
+#define COLOR_OLIVE       (Color::from_hex(0x808000))
+#define COLOR_LIME        (Color::from_hex(0x00FF00))
+#define COLOR_GREEN       (Color::from_hex(0x008000))
+#define COLOR_AQUA        (Color::from_hex(0x00FFFF))
+#define COLOR_TEAL        (Color::from_hex(0x008080))
+#define COLOR_BLUE        (Color::from_hex(0x0000FF))
+#define COLOR_NAVY        (Color::from_hex(0x000080))
+#define COLOR_FUCHSIA     (Color::from_hex(0xFF00FF))
+#define COLOR_PURPLE      (Color::from_hex(0x800080))
 
-#define STYLE_RESET     (1 << 0)
-#define STYLE_BOLD      (1 << 1)
-#define STYLE_UNDERLINE (1 << 2)
-#define STYLE_INVERSE   (1 << 3)
-#define STYLE_NO_FG     (1 << 4)
-#define STYLE_NO_BG     (1 << 5)
+#define STYLE_RESET       (1 << 0)
+#define STYLE_BOLD        (1 << 1)
+#define STYLE_LIGHT       (1 << 2)
+#define STYLE_ITALIC      (1 << 3)
+#define STYLE_UNDERLINE   (1 << 4)
+#define STYLE_BLINK       (1 << 5)
+#define STYLE_INVERSE     (1 << 6)
+#define STYLE_INVISIBLE   (1 << 7)
+#define STYLE_CROSSED_OUT (1 << 8)
+#define STYLE_UNDERLINE2  (1 << 9)
+
+#define STYLE_NO_FG       (1 << 10)
+#define STYLE_NO_BG       (1 << 11)
 
     /**
      * Represent the style of a cell
@@ -119,7 +126,7 @@ namespace nite
     struct Style {
         Color bg = Color::from_hex(0x000000);
         Color fg = Color::from_hex(0xffffff);
-        uint8_t mode = STYLE_RESET;
+        uint16_t mode = STYLE_RESET;
 
         constexpr Style invert() const {
             return Style{.bg = bg.invert(), .fg = fg.invert(), .mode = mode};

@@ -38,8 +38,10 @@
 #    include <cstring>
 #endif
 
-#define ESC "\033"
-#define CSI ESC "["
+#define ESC                 "\033"
+#define CSI                 ESC "["
+
+#define NITE_DEFAULT_LOCALE "en_US.UTF-8"
 
 #define $(expr)                                                                                                                                      \
     if (const auto result = (expr); !result)                                                                                                         \
@@ -50,8 +52,7 @@
 
 static std::string wc_to_string(const wchar_t c) {
     // Create conversion state
-    std::mbstate_t state;
-    memset(&state, 0, sizeof(state));
+    std::mbstate_t state = {};
     // Create buffer
     char buf[16];
     // Convert
@@ -66,10 +67,9 @@ static std::string wc_to_string(const wchar_t c) {
 
 static std::string wc_to_string(const wchar_t c) {
     // Create conversion state
-    std::mbstate_t state;
-    memset(&state, 0, sizeof(state));
+    std::mbstate_t state = {};
     // Create the buffer
-    char buf[16];
+    char buf[MB_CUR_MAX];
     // Convert
     size_t len = wcrtomb(buf, c, &state);
     if (len == static_cast<size_t>(-1))
@@ -1730,14 +1730,27 @@ namespace nite::internal::console
 {
     void set_style(const Style style) {
         // Refer to: https://learn.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
+        // Refer to: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-Pm-m.1CA7
         if (style.mode & STYLE_RESET)
             print(CSI "0m");
         if (style.mode & STYLE_BOLD)
             print(CSI "1m");
+        if (style.mode & STYLE_LIGHT)
+            print(CSI "2m");
+        if (style.mode & STYLE_ITALIC)
+            print(CSI "3m");
         if (style.mode & STYLE_UNDERLINE)
             print(CSI "4m");
+        if (style.mode & STYLE_BLINK)
+            print(CSI "5m");
         if (style.mode & STYLE_INVERSE)
             print(CSI "7m");
+        if (style.mode & STYLE_INVISIBLE)
+            print(CSI "8m");
+        if (style.mode & STYLE_CROSSED_OUT)
+            print(CSI "9m");
+        if (style.mode & STYLE_UNDERLINE2)
+            print(CSI "21m");
 
         if ((style.mode & STYLE_NO_FG) == 0)
             // Set foreground color
@@ -1752,12 +1765,69 @@ namespace nite::internal::console
         print(CSI "" + std::to_string(row + 1) + ";" + std::to_string(col + 1) + "H");
     }
 
+    static size_t prev_col = 0;
+    static size_t prev_row = 0;
+    static std::optional<Style> prev_style = std::nullopt;
+
     void set_cell(const size_t col, const size_t row, const wchar_t value, const Style style) {
-        gotoxy(col, row);
-        set_style(style);
-        // std::fputwc(value, stdout);
-        print(wc_to_string(value));
+        std::string out;
+
+        if (prev_col + 1 == col && prev_row == row)
+            // no change, go with the flow
+            ;
+        else
+            // goto to the specified coords
+            out += (CSI + std::to_string(row + 1) + ";" + std::to_string(col + 1) + "H");
+
+        // update these
+        prev_col = col;
+        prev_row = row;
+
+        if (!prev_style || *prev_style != style) {
+            // set the console style
+            if (style.mode & STYLE_RESET)
+                out += (CSI "0m");
+            if (style.mode & STYLE_BOLD)
+                out += (CSI "1m");
+            if (style.mode & STYLE_LIGHT)
+                out += (CSI "2m");
+            if (style.mode & STYLE_ITALIC)
+                out += (CSI "3m");
+            if (style.mode & STYLE_UNDERLINE)
+                out += (CSI "4m");
+            if (style.mode & STYLE_BLINK)
+                out += (CSI "5m");
+            if (style.mode & STYLE_INVERSE)
+                out += (CSI "7m");
+            if (style.mode & STYLE_INVISIBLE)
+                out += (CSI "8m");
+            if (style.mode & STYLE_CROSSED_OUT)
+                out += (CSI "9m");
+            if (style.mode & STYLE_UNDERLINE2)
+                out += (CSI "21m");
+
+            if ((style.mode & STYLE_NO_FG) == 0)
+                if (!prev_style || prev_style->fg != style.fg)
+                    // Set foreground color
+                    out += (CSI "38;2;" + std::to_string(style.fg.r) + ";" + std::to_string(style.fg.g) + ";" + std::to_string(style.fg.b) + "m");
+
+            if ((style.mode & STYLE_NO_BG) == 0)
+                if (!prev_style || prev_style->bg != style.bg)
+                    // Set background color
+                    out += (CSI "48;2;" + std::to_string(style.bg.r) + ";" + std::to_string(style.bg.g) + ";" + std::to_string(style.bg.b) + "m");
+
+            prev_style = style;
+        }
+        // Now the main thing
+        out += wc_to_string(value);
+        print(out);
     }
+
+    // void set_cell(const size_t col, const size_t row, const wchar_t value, const Style style) {
+    //     gotoxy(col, row);
+    //     set_style(style);
+    //     print(wc_to_string(value));
+    // }
 }    // namespace nite::internal::console
 
 #ifdef OS_WINDOWS
@@ -1872,7 +1942,8 @@ namespace nite::internal::console
 
         // Set locale to utf-8
         old_locale = std::setlocale(LC_CTYPE, NULL);
-        std::setlocale(LC_CTYPE, "en_US.utf8");
+        if (std::setlocale(LC_CTYPE, NITE_DEFAULT_LOCALE) == NULL)
+            return std::format("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
 
         $(print(CSI "?1049h"));    // Enter alternate buffer
         $(print(CSI "?25l"));      // Hide console cursor
@@ -1890,7 +1961,8 @@ namespace nite::internal::console
         $(print(CSI "?1049l"));    // Exit alternate buffer
 
         // Restore locale
-        std::setlocale(LC_CTYPE, old_locale.c_str());
+        if (std::setlocale(LC_CTYPE, old_locale.c_str()) == NULL)
+            return std::format("error restoring locale to '{}'", old_locale);
 
         if (!SetConsoleOutputCP(old_console_cp))
             return std::format("error setting console code page: {}", get_last_error());
@@ -2556,7 +2628,8 @@ namespace nite::internal::console
     Result init() {
         // Set locale to utf-8
         old_locale = std::setlocale(LC_CTYPE, NULL);
-        std::setlocale(LC_CTYPE, "en_US.utf8");
+        if (std::setlocale(LC_CTYPE, NITE_DEFAULT_LOCALE) == NULL)
+            return std::format("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
 
         initscr();               // Start curses mode
         raw();                   // Make the terminal raw
@@ -2581,7 +2654,8 @@ namespace nite::internal::console
         endwin();    // End curses mode
 
         // Restore locale
-        std::setlocale(LC_CTYPE, old_locale.c_str());
+        if (std::setlocale(LC_CTYPE, old_locale.c_str()) == NULL)
+            return std::format("error restoring locale to '{}'", old_locale);
         return true;
     }
 }    // namespace nite::internal::console
@@ -3006,6 +3080,7 @@ namespace nite::internal::console
         // Refer to: man 3 termios
         if (tcgetattr(STDIN_FILENO, &old_term) == -1)
             return std::format("error getting terminal attributes: {}", get_last_error());
+
         new_term = old_term;
         cfmakeraw(&new_term);    // enable raw mode
         // cfmakeraw() does this:
@@ -3021,7 +3096,8 @@ namespace nite::internal::console
 
         // Set locale to utf-8
         old_locale = std::setlocale(LC_CTYPE, NULL);
-        std::setlocale(LC_CTYPE, "en_US.utf8");
+        if (std::setlocale(LC_CTYPE, NITE_DEFAULT_LOCALE) == NULL)
+            return std::format("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
 
         $(print(CSI "?1049h"));    // Enter alternate buffer
         $(print(CSI "?25l"));      // Hide console cursor
@@ -3037,8 +3113,6 @@ namespace nite::internal::console
         //       = `Disambiguate escape codes` and `Report alternate keys`
         $(print(CSI ">5u"));
 
-        // $(print(CSI "?1039h"));    // Send ESC when Alt modifies a key
-
         // Mouse specific
         $(print(CSI "?1000h"));    // Send Mouse X & Y on button press and release
         $(print(CSI "?1002h"));    // Use Cell Motion Mouse Tracking (move and drag tracking)
@@ -3047,7 +3121,6 @@ namespace nite::internal::console
         // Other specific
         $(print(CSI "?1004h"));    // Send FocusIn/FocusOut events
         $(print(CSI "?30l"));      // Do not show scroll bar
-
         return true;
     }
 
@@ -3060,8 +3133,6 @@ namespace nite::internal::console
         $(print(CSI "?1003l"));    // Do not use All Motion Mouse Tracking
         $(print(CSI "?1002l"));    // Do not use Cell Motion Mouse Tracking (move and drag tracking)
         $(print(CSI "?1000l"));    // Do not send Mouse X & Y on button press and release
-        // Keyboard specific
-        // $(print(CSI "?1039h"));    // Do not Send ESC when Alt modifies a key
 
         // Disable kitty keyboard protocol
         $(print(CSI "<u"));
@@ -3071,7 +3142,8 @@ namespace nite::internal::console
         $(print(CSI "?1049l"));    // Exit alternate buffer
 
         // Restore locale
-        std::setlocale(LC_CTYPE, old_locale.c_str());
+        if (std::setlocale(LC_CTYPE, old_locale.c_str()) == NULL)
+            return std::format("error restoring locale to '{}'", old_locale);
         // Restore old terminal modes
         if (tcsetattr(STDIN_FILENO, TCSANOW, &old_term) == -1)
             return std::format("error setting terminal attributes: {}", get_last_error());
@@ -3084,30 +3156,35 @@ namespace nite::internal
     Result get_key_code(char c, KeyCode &key_code);
 
     bool con_read(std::string &str) {
+        // more efficient version and takes all available input
         static char buf[256];
         memset(buf, 0, sizeof(buf));
+        str = "";
 
         fd_set rfds;
         FD_ZERO(&rfds);
         FD_SET(STDIN_FILENO, &rfds);
+
         struct timeval tv;
         tv.tv_sec = 0;
         tv.tv_usec = 2 * 1000;
 
-        int ret = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
-        if (ret == -1)
-            return false;    // Call failed
-        if (ret == 0)
-            return false;    // Nothing available
+        for (;;) {
+            int ret = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
+            if (ret == -1)
+                break;    // Call failed
+            if (ret == 0)
+                break;    // Nothing available
 
-        ssize_t len = read(STDIN_FILENO, buf, sizeof(buf));
-        if (len == -1)
-            return false;    // Call failed
-        if (len == 0)
-            return false;    // Nothing available
+            ssize_t len = read(STDIN_FILENO, buf, sizeof(buf));
+            if (len == -1)
+                break;    // Call failed
+            if (len == 0)
+                break;    // Nothing available
 
-        str = std::string(buf, len);
-        return true;
+            str.append(buf, len);
+        }
+        return !str.empty();
     }
 
     // -------------------------------------------------------------------
@@ -3625,6 +3702,7 @@ namespace nite::internal
 
         bool parse(Event &event) {
             if (text == ESC) {
+                advance();
                 event = KeyEvent{
                         .key_down = true,
                         .key_code = KeyCode::ESCAPE,
