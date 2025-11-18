@@ -1498,6 +1498,232 @@ namespace nite
         }
     }
 
+    static void format_styled_text(std::vector<StyledChar> &list, const char c, const Style style) {
+        switch (c) {
+        case '\x00':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'N', .style = style});
+            list.push_back(StyledChar{.value = 'U', .style = style});
+            list.push_back(StyledChar{.value = 'L', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x01':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = 'O', .style = style});
+            list.push_back(StyledChar{.value = 'H', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x02':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = 'T', .style = style});
+            list.push_back(StyledChar{.value = 'X', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x03':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = 'T', .style = style});
+            list.push_back(StyledChar{.value = 'X', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x04':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = 'O', .style = style});
+            list.push_back(StyledChar{.value = 'T', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x05':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = 'N', .style = style});
+            list.push_back(StyledChar{.value = 'Q', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x06':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'A', .style = style});
+            list.push_back(StyledChar{.value = 'C', .style = style});
+            list.push_back(StyledChar{.value = 'K', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x07':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'B', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = 'L', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x08':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'B', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x09':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'H', .style = style});
+            list.push_back(StyledChar{.value = 'T', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x0A':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'L', .style = style});
+            list.push_back(StyledChar{.value = 'F', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x0B':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'V', .style = style});
+            list.push_back(StyledChar{.value = 'T', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x0C':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'F', .style = style});
+            list.push_back(StyledChar{.value = 'F', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x0D':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'C', .style = style});
+            list.push_back(StyledChar{.value = 'R', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x0E':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = 'O', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x0F':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = 'I', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x10':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'D', .style = style});
+            list.push_back(StyledChar{.value = 'L', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x11':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'D', .style = style});
+            list.push_back(StyledChar{.value = 'C', .style = style});
+            list.push_back(StyledChar{.value = '1', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x12':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'D', .style = style});
+            list.push_back(StyledChar{.value = 'C', .style = style});
+            list.push_back(StyledChar{.value = '2', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x13':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'D', .style = style});
+            list.push_back(StyledChar{.value = 'C', .style = style});
+            list.push_back(StyledChar{.value = '3', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x14':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'D', .style = style});
+            list.push_back(StyledChar{.value = 'C', .style = style});
+            list.push_back(StyledChar{.value = '4', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x15':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'N', .style = style});
+            list.push_back(StyledChar{.value = 'A', .style = style});
+            list.push_back(StyledChar{.value = 'K', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x16':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = 'Y', .style = style});
+            list.push_back(StyledChar{.value = 'N', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x17':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = 'T', .style = style});
+            list.push_back(StyledChar{.value = 'B', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x18':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'C', .style = style});
+            list.push_back(StyledChar{.value = 'A', .style = style});
+            list.push_back(StyledChar{.value = 'N', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x19':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = 'M', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x1A':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = 'U', .style = style});
+            list.push_back(StyledChar{.value = 'B', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x1B':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = 'C', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x1C':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'F', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x1D':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'G', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x1E':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'R', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x1F':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'U', .style = style});
+            list.push_back(StyledChar{.value = 'S', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        case '\x7F':
+            list.push_back(StyledChar{.value = '<', .style = style});
+            list.push_back(StyledChar{.value = 'D', .style = style});
+            list.push_back(StyledChar{.value = 'E', .style = style});
+            list.push_back(StyledChar{.value = 'L', .style = style});
+            list.push_back(StyledChar{.value = '>', .style = style});
+            break;
+        default:
+            list.push_back(StyledChar{.value = c, .style = style});
+            break;
+        }
+    }
+
     std::vector<StyledChar> TextInputState::process(
             const Style text_style, const Style selection_style, const Style cursor_style, const Style cursor_style_ins, const Style cursor_style_sel
     ) {
@@ -1511,12 +1737,12 @@ namespace nite
                 if (i == data.size() || data[i] == '\n')
                     result.push_back(StyledChar{.value = ' ', .style = cur_style});
                 if (i < data.size())
-                    result.push_back(StyledChar{.value = static_cast<wchar_t>(data[i]), .style = cur_style});
+                    format_styled_text(result, data[i], cur_style);
             } else if (i < data.size()) {
                 if (selection_mode && selection_start <= i && i < selection_end)
-                    result.push_back(StyledChar{.value = static_cast<wchar_t>(data[i]), .style = selection_style});
+                    format_styled_text(result, data[i], selection_style);
                 else
-                    result.push_back(StyledChar{.value = static_cast<wchar_t>(data[i]), .style = text_style});
+                    format_styled_text(result, data[i], text_style);
             }
         }
 

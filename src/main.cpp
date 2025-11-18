@@ -540,10 +540,12 @@ void input_test(State &state){
 
         HandleEvent(event, [&](const KeyEvent &ev) {
             if (ev.key_down && ev.modifiers == 0) {
-                if (ev.key_code == KeyCode::K_Q && (ev.modifiers & KEY_CTRL) != 0)
+                if (ev.key_code == KeyCode::F1 && ev.modifiers == 0)
                     CloseWindow(state);
-                if (ev.key_code == KeyCode::K_L && (ev.modifiers & KEY_CTRL) != 0)
+                if (ev.key_code == KeyCode::F2 && ev.modifiers == 0)
                     align++;
+                if (ev.key_code == KeyCode::F3 && ev.modifiers == 0)
+                    text_state.insert_char('\x1d'); // See the magic
             }
         });
     }
@@ -566,7 +568,7 @@ int main() {
     Initialize(state);
 
     while (!ShouldWindowClose(state)) {
-        linux_test(state);
+        input_test(state);
     }
 
     Cleanup();
