@@ -1,8 +1,5 @@
 // clang-format off
 
-#include <cassert>
-#include <cctype>
-#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
@@ -254,7 +251,7 @@ void grid_test(State &state) {
     EndDrawing(state);
 }
 
-void linux_test(State &state) {
+void event_test(State &state) {
     static Position pivot;
     static std::vector<std::string> lines;
 
@@ -320,7 +317,7 @@ void linux_test(State &state) {
                 }
             },
             [&](const DebugEvent &ev) {
-                lines.push_back(ev.text);
+                lines.push_back(quoted_str(ev.text));
             }
         );
     }
