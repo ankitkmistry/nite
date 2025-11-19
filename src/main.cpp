@@ -630,14 +630,39 @@ void input_test(State &state){
     EndDrawing(state);
 }
 
-// clang-format on
+// clang-format off
 
 int main() {
     auto &state = GetState();
     Initialize(state);
 
+    CheckBoxValue value = CheckBoxValue::UNCHECKED;
+
     while (!ShouldWindowClose(state)) {
-        rgb_image_test(state);
+        Event event;
+        while (PollEvent(state, event)) {
+            HandleEvent(event, [&](const KeyEvent &ev) {
+                if (ev.key_down && ev.modifiers == 0) {
+                    if (ev.key_code == KeyCode::F4 && ev.modifiers == 0)
+                        CloseWindow(state);
+                }
+            });
+        }
+
+        BeginDrawing(state);
+
+        CheckBox(state, value, {
+            .text = "Are you over 18?",
+            .pos = {.col = 0, .row = 0},
+            .allow_indeterm = true,
+        });
+
+        Text(state, {
+            .text = std::format("Value: {}", static_cast<int>(value)),
+            .pos = {.col = 0, .row = 1},
+        });
+
+        EndDrawing(state);
     }
 
     Cleanup();

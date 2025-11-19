@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <wchar.h>
+#include <cwchar>
 
 #include "nite.hpp"
 
@@ -46,37 +46,132 @@
     if (const auto result = (expr); !result)                                                                                                         \
     return result
 
+namespace nite
+{
+    std::string wc_to_str(const wchar_t wc) {
+        // Create conversion state
+        mbstate_t state = {};
+        // Create buffer
+        std::vector<char> buf(MB_CUR_MAX);
+
 #ifdef OS_WINDOWS
-#    include <wchar.h>
-
-static std::string wc_to_string(const wchar_t c) {
-    // Create conversion state
-    std::mbstate_t state = {};
-    // Create buffer
-    char buf[16];
-    // Convert
-    size_t len;
-    wcrtomb_s(&len, buf, sizeof(buf), c, &state);
-    if (len == static_cast<size_t>(-1))
-        return "";
-    return std::string(buf, len);
-}
-
+        // Convert
+        size_t len;
+        wcrtomb_s(&len, &buf[0], sizeof(buf), wc, &state);
+        if (len == static_cast<size_t>(-1))
+            return "";
+        return std::string(&buf[0], len);
 #else
-
-static std::string wc_to_string(const wchar_t c) {
-    // Create conversion state
-    std::mbstate_t state = {};
-    // Create the buffer
-    char buf[MB_CUR_MAX];
-    // Convert
-    size_t len = wcrtomb(buf, c, &state);
-    if (len == static_cast<size_t>(-1))
-        return "";
-    return std::string(buf, len);
-}
-
+        // Convert
+        const size_t len = wcrtomb(&buf[0], c, &state);
+        if (len == static_cast<size_t>(-1))
+            return "";
+        return std::string(&buf[0], len);
 #endif
+    }
+
+    // Convert a multibyte (narrow) string to a single wide character.
+    // Returns L'\0' on empty input or on conversion error.
+    wchar_t str_to_wc(const std::string &str) {
+        if (str.empty())
+            return L'\0';
+
+        mbstate_t state = {};
+        wchar_t wc;
+        // mbrtowc converts the multibyte sequence to a wide char.
+        // Provide str.size() + 1 so the terminating null can be considered.
+        const size_t ret = mbrtowc(&wc, str.c_str(), str.size() + 1, &state);
+        if (ret == static_cast<size_t>(-1) || ret == static_cast<size_t>(-2))
+            return L'\0';
+        return wc;
+    }
+
+    // Convert a single narrow char to a wide char using str_to_wc helper.
+    wchar_t c_to_wc(const char c) {
+        return str_to_wc(std::string(1, c));
+    }
+
+    // Convert a multibyte std::string to a std::wstring.
+    // Uses the "secure" variants on Windows (mbsrtowcs_s) and the standard
+    // mbsrtowcs on POSIX. Returns empty string on failure.
+    std::wstring str_to_wstr(const std::string &str) {
+        if (str.empty())
+            return L"";
+        mbstate_t state = {};
+        const char *src = str.c_str();
+
+#ifdef OS_WINDOWS
+        // mbsrtowcs_s reports required number of wide chars (including null).
+        size_t required = 0;
+        const char *p = src;
+        if (mbsrtowcs_s(&required, NULL, 0, &p, 0, &state) != 0 || required == 0)
+            return L"";
+
+        std::vector<wchar_t> buf(required);    // includes space for terminating null
+        p = src;
+        size_t converted = 0;
+        if (mbsrtowcs_s(&converted, buf.data(), buf.size(), &p, buf.size(), &state) != 0)
+            return L"";
+
+        // converted includes terminating null, so subtract one for length
+        const size_t len_without_null = converted > 0 ? converted - 1 : 0;
+        return std::wstring(buf.data(), len_without_null);
+#else
+        // POSIX: first get required length (excluding terminating null)
+        const size_t len = mbsrtowcs(NULL, &src, 0, &state);
+        if (len == static_cast<size_t>(-1))
+            return L"";
+
+        std::vector<wchar_t> buf(len + 1);    // +1 for terminating null
+        src = str.c_str();
+        const size_t ret = mbsrtowcs(buf.data(), &src, buf.size(), &state);
+        if (ret == static_cast<size_t>(-1))
+            return L"";
+
+        return std::wstring(buf.data(), ret);
+#endif
+    }
+
+    // Convert a std::wstring to a multibyte std::string.
+    // Uses wcsrtombs_s on Windows and wcsrtombs on POSIX. Returns empty string on failure.
+    std::string wstr_to_str(const std::wstring &str) {
+        if (str.empty())
+            return "";
+        mbstate_t state = {};
+        const wchar_t *src = str.c_str();
+
+#ifdef OS_WINDOWS
+        // wcsrtombs_s reports required number of bytes (including null).
+        size_t required = 0;
+        const wchar_t *p = src;
+        if (wcsrtombs_s(&required, NULL, 0, &p, 0, &state) != 0 || required == 0)
+            return "";
+
+        std::vector<char> buf(required);    // includes space for terminating null
+        p = src;
+        size_t converted = 0;
+        if (wcsrtombs_s(&converted, buf.data(), buf.size(), &p, buf.size(), &state) != 0)
+            return "";
+
+        // converted includes terminating null, so subtract one for length
+        const size_t len_without_null = converted > 0 ? converted - 1 : 0;
+        return std::string(buf.data(), len_without_null);
+#else
+        // POSIX: first get required length (excluding terminating null)
+        const size_t len = wcsrtombs(NULL, &src, 0, &state);
+        if (len == static_cast<size_t>(-1))
+            return "";
+
+        std::vector<char> buf(len + 1);    // +1 for terminating null
+        src = str.c_str();
+        const size_t ret = wcsrtombs(buf.data(), &src, buf.size(), &state);
+        if (ret == static_cast<size_t>(-1))
+            return "";
+
+        return std::string(buf.data(), ret);
+#endif
+    }
+}    // namespace nite
 
 static inline constexpr bool is_print(char c) {
     return 32 <= c && c <= 126;
@@ -838,7 +933,7 @@ namespace nite
                 SetCell(state, scroll.top.value, top_scroll_btn, scroll.top.style);
                 SetCell(state, scroll.bottom.value, bottom_scroll_btn, scroll.bottom.style);
 
-                const size_t row = (double) pivot.row / max_size.height * (vscroll_end.row - vscroll_start.row);
+                const size_t row = static_cast<double>(pivot.row) / max_size.height * (vscroll_end.row - vscroll_start.row);
                 const auto node_start = Position{.col = min_size.width - 1, .row = row + 1} + pivot;
                 const size_t max_row = (double) (max_size.height - min_size.height - 1) / max_size.height * (vscroll_end.row - vscroll_start.row);
                 const size_t node_height = (vscroll_end.row - vscroll_start.row) - max_row;
@@ -855,7 +950,7 @@ namespace nite
                 SetCell(state, scroll.left.value, left_scroll_btn, scroll.left.style);
                 SetCell(state, scroll.right.value, right_scroll_btn, scroll.right.style);
 
-                const size_t col = (double) pivot.col / max_size.width * (hscroll_end.col - hscroll_start.col);
+                const size_t col = static_cast<double>(pivot.col) / max_size.width * (hscroll_end.col - hscroll_start.col);
                 const auto node_start = Position{.col = col + 1, .row = min_size.height - 1} + pivot;
                 const size_t max_col = (double) (max_size.width - min_size.width - 1) / max_size.width * (hscroll_end.col - hscroll_start.col);
                 const size_t node_width = (hscroll_end.col - hscroll_start.col) - max_col;
@@ -949,6 +1044,31 @@ namespace nite
 
         for (size_t i = 0; char c: info.text) {
             state.impl->set_cell(info.pos.col + i, info.pos.row, c, info.style);
+            i++;
+        }
+    }
+
+    void RichText(State &state, RichTextInfo info) {
+        if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1})
+                    .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
+            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
+                if (info.on_click)
+                    while (count--)
+                        info.on_click(std::forward<RichTextInfo &>(info));
+            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
+                if (info.on_menu)
+                    while (count--)
+                        info.on_menu(std::forward<RichTextInfo &>(info));
+            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
+                if (info.on_click2)
+                    while (count--)
+                        info.on_click2(std::forward<RichTextInfo &>(info));
+            } else if (info.on_hover)
+                info.on_hover(std::forward<RichTextInfo &>(info));
+        }
+
+        for (size_t i = 0; StyledChar st_char: info.text) {
+            state.impl->set_cell(info.pos.col + i, info.pos.row, st_char.value, st_char.style);
             i++;
         }
     }
@@ -1745,7 +1865,7 @@ namespace nite
             list.push_back(StyledChar{.value = '>', .style = style});
             break;
         default:
-            list.push_back(StyledChar{.value = static_cast<wchar_t>(c), .style = style});
+            list.push_back(StyledChar{.value = c_to_wc(c), .style = style});
             break;
         }
     }
@@ -1893,6 +2013,82 @@ namespace nite
         // clang-format on
 
         text_state.clear_captured_events();
+    }
+
+    std::vector<StyledChar> compute_check_box(CheckBoxValue &value, const CheckBoxInfo &info) {
+        std::vector<StyledChar> result;
+        switch (value) {
+        case CheckBoxValue::UNCHECKED:
+            result.push_back(info.check_box.unchecked);
+            result.push_back({' ', info.check_box.unchecked.style});
+            result.push_back({' ', info.check_box.unchecked.style});
+            break;
+        case CheckBoxValue::CHECKED:
+            result.push_back(info.check_box.checked);
+            result.push_back({' ', info.check_box.checked.style});
+            result.push_back({' ', info.check_box.checked.style});
+            break;
+        case CheckBoxValue::INDETERMINATE:
+            result.push_back(info.check_box.indeterm);
+            result.push_back({' ', info.check_box.indeterm.style});
+            result.push_back({' ', info.check_box.indeterm.style});
+            break;
+        }
+        for (char c: info.text)
+            result.push_back(StyledChar{c_to_wc(c), info.style});
+        return result;
+    }
+
+    void CheckBox(State &state, CheckBoxValue &value, CheckBoxInfo info) {
+        if (!info.allow_indeterm && value == CheckBoxValue::INDETERMINATE)
+            value = CheckBoxValue::UNCHECKED;
+
+        const auto click_action = [&]() {
+            switch (value) {
+            case CheckBoxValue::UNCHECKED:
+                value = CheckBoxValue::CHECKED;
+                break;
+            case CheckBoxValue::CHECKED:
+                value = info.allow_indeterm ? CheckBoxValue::INDETERMINATE : CheckBoxValue::UNCHECKED;
+                break;
+            case CheckBoxValue::INDETERMINATE:
+                value = CheckBoxValue::UNCHECKED;
+                break;
+            }
+        };
+
+        // clang-format off
+        RichText(state, {
+            .text = compute_check_box(value, info),
+            .pos = info.pos,
+            .on_hover =
+                [&](RichTextInfo &text_info) {
+                    if (info.on_hover)
+                        info.on_hover(std::forward<CheckBoxInfo &>(info));
+                    text_info.text = compute_check_box(value, info);
+                },
+            .on_click =
+                [&](RichTextInfo &text_info) {
+                    click_action();
+                    if (info.on_click)
+                        info.on_click(std::forward<CheckBoxInfo &>(info));
+                    text_info.text = compute_check_box(value, info);
+                },
+            .on_click2 =
+                [&](RichTextInfo &text_info) {
+                    click_action();
+                    if (info.on_click2)
+                        info.on_click2(std::forward<CheckBoxInfo &>(info));
+                    text_info.text = compute_check_box(value, info);
+                },
+            .on_menu =
+                [&](RichTextInfo &text_info) {
+                    if (info.on_menu)
+                        info.on_menu(std::forward<CheckBoxInfo &>(info));
+                    text_info.text = compute_check_box(value, info);
+                }
+        });
+        // clang-format on
     }
 
     bool PollEvent(State &state, Event &event) {
@@ -2069,14 +2265,14 @@ namespace nite::internal::console
             prev_style = style;
         }
         // Now the main thing
-        out += wc_to_string(value);
+        out += wc_to_str(value);
         print(out);
     }
 
     // void set_cell(const size_t col, const size_t row, const wchar_t value, const Style style) {
     //     gotoxy(col, row);
     //     set_style(style);
-    //     print(wc_to_string(value));
+    //     print(wc_to_str(value));
     // }
 }    // namespace nite::internal::console
 
@@ -2100,7 +2296,7 @@ namespace nite::internal::console
 
         if (size == 0)
             return get_last_error();
-        return std::string{static_cast<const char *>(err_msg_buf), size};
+        return std::string{err_msg_buf, size};
     }
 
     bool is_tty() {

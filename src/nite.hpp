@@ -17,6 +17,17 @@
 
 namespace nite
 {
+    /// Converts a wide character to mutiple byte string
+    std::string wc_to_str(const wchar_t wc);
+    /// Converts a mutiple byte string to wide character
+    wchar_t str_to_wc(const std::string &str);
+    /// Converts a single byte (char) to wide character
+    wchar_t c_to_wc(const char c);
+    /// Converts a multiple byte string to wide string
+    std::wstring str_to_wstr(const std::string &str);
+    /// Converts a wide string to multiple byte string
+    std::string wstr_to_str(const std::wstring &str);
+
     class Result {
         bool success;
         std::string message;
@@ -1638,6 +1649,30 @@ namespace nite
      */
     void Text(State &state, TextInfo info);
 
+    struct RichTextInfo {
+        /// The text to display (with style)
+        std::vector<StyledChar> text = {};
+        /// Position of the text
+        Position pos = {};
+
+        /// Handler triggered when mouse is hovered
+        HandlerFn<RichTextInfo> on_hover = {};
+        /// Handler triggered when mouse clicks on this
+        HandlerFn<RichTextInfo> on_click = {};
+        /// Handler triggered when mouse double clicks on this
+        HandlerFn<RichTextInfo> on_click2 = {};
+        /// Handler triggered when mouse right clicks on this
+        HandlerFn<RichTextInfo> on_menu = {};
+    };
+
+    /**
+     * Displays rich text on the console window.
+     * This does not support multi-line text.
+     * @param [inout] state the console state to work on
+     * @param [in] info the text information provided
+     */
+    void RichText(State &state, RichTextInfo info);
+
     struct TextBoxInfo {
         /// The text to display
         std::string text = {};
@@ -1939,4 +1974,41 @@ namespace nite
     };
 
     void TextInput(State &state, TextInputState &text_state, TextInputInfo info);
+
+    enum class CheckBoxValue {
+        UNCHECKED,
+        CHECKED,
+        INDETERMINATE,
+    };
+
+    struct CheckBoxStyle {
+        StyledChar unchecked;
+        StyledChar checked;
+        StyledChar indeterm;
+    };
+
+    inline static constexpr const CheckBoxStyle CHECKBOX_DEFAULT = {
+            .unchecked = {L'☐', {}},
+            .checked = {L'☑', {}},
+            .indeterm = {L'☒', {}},
+    };
+
+    struct CheckBoxInfo {
+        std::string text = "";
+        Position pos = {};
+        CheckBoxStyle check_box = CHECKBOX_DEFAULT;
+        bool allow_indeterm = false;
+        Style style = {};
+
+        /// Handler triggered when mouse is hovered
+        HandlerFn<CheckBoxInfo> on_hover = {};
+        /// Handler triggered when mouse clicks on this
+        HandlerFn<CheckBoxInfo> on_click = {};
+        /// Handler triggered when mouse double clicks on this
+        HandlerFn<CheckBoxInfo> on_click2 = {};
+        /// Handler triggered when mouse right clicks on this
+        HandlerFn<CheckBoxInfo> on_menu = {};
+    };
+
+    void CheckBox(State &state, CheckBoxValue &value, CheckBoxInfo info);
 }    // namespace nite
