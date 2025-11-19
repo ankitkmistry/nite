@@ -439,6 +439,10 @@ namespace nite
         return state.impl->swapchain.back().size();
     }
 
+    Position GetPanePosition(State &state) {
+        return state.impl->get_selected().get_pos();
+    }
+
     Size GetPaneSize(State &state) {
         return state.impl->get_selected().get_size();
     }
@@ -824,7 +828,7 @@ namespace nite
                 SetCell(state, scroll.home.value, home_cell, scroll.home.style);
             }
             // Vertical scroll
-            if (scroll_box->show_vscroll_bar() && min_size.height != max_size.height) {
+            if (scroll_box->show_vscroll_bar() && min_size.height < max_size.height) {
                 const auto vscroll_start = Position{.col = min_size.width - 1, .row = 1} + pivot;
                 const auto vscroll_end = Position{.col = min_size.width - 1, .row = min_size.height - 2} + pivot;
                 DrawLine(state, vscroll_start, vscroll_end, scroll.v_bar.value, scroll.v_bar.style);
@@ -841,7 +845,7 @@ namespace nite
                 DrawLine(state, node_start, {.col = node_start.col, .row = node_start.row + node_height}, scroll.v_node.value, scroll.v_node.style);
             }
             // Horizontal scroll
-            if (scroll_box->show_hscroll_bar() && min_size.width != max_size.width) {
+            if (scroll_box->show_hscroll_bar() && min_size.width < max_size.width) {
                 const auto hscroll_start = Position{.col = 1, .row = min_size.height - 1} + pivot;
                 const auto hscroll_end = Position{.col = min_size.width - 2, .row = min_size.height - 1} + pivot;
                 DrawLine(state, hscroll_start, hscroll_end, scroll.h_bar.value, scroll.h_bar.style);
@@ -861,7 +865,7 @@ namespace nite
         state.impl->selected_stack.pop();
     }
 
-    void DrawBorder(State &state, const BoxBorder &border) {
+    void BeginBorder(State &state, const BoxBorder &border) {
         const internal::Box &selected = state.impl->get_selected();
 
         if (border.top_left.value != '\0')
@@ -887,6 +891,33 @@ namespace nite
             if (border.bottom.value != '\0')
                 SetCell(state, border.bottom.value, {.col = col, .row = selected.get_size().height - 1}, border.bottom.style);
         }
+    }
+
+    void EndBorder(State &state) {
+        internal::Box &selected = state.impl->get_selected();
+
+        // Change this for convenience
+        const size_t x = selected.get_pos().x;
+        const size_t y = selected.get_pos().y;
+        const size_t width = selected.get_size().width;
+        const size_t height = selected.get_size().height;
+
+        selected.set_pos({.x = x + 1, .y = y + 1});
+        selected.set_size({.width = width - 2, .height = height - 2});
+    }
+
+    void DrawBorder(State &state, const BoxBorder &border, const std::string &text) {
+        BeginBorder(state, border);
+        if (!text.empty()) {
+            // clang-format off
+            Text(state, {
+                .text = text,
+                .pos = {.col = 1, .row = 0},
+                .style = border.top.style,
+            });
+            // clang-format on
+        }
+        EndBorder(state);
     }
 
     void DrawHDivider(State &state, size_t row, wchar_t value, Style style) {
@@ -1563,7 +1594,7 @@ namespace nite
             list.push_back(StyledChar{.value = 'S', .style = style});
             list.push_back(StyledChar{.value = '>', .style = style});
             break;
-        case '\x09': // horizontal tab
+        case '\x09':    // horizontal tab
             list.push_back(StyledChar{.value = ' ', .style = style});
             list.push_back(StyledChar{.value = ' ', .style = style});
             list.push_back(StyledChar{.value = ' ', .style = style});

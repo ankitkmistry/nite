@@ -141,6 +141,9 @@ namespace nite
         }
     };
 
+    /**
+     * Represents a character with style attributes
+     */
     struct StyledChar {
         wchar_t value = '\0';
         Style style = {};
@@ -148,6 +151,9 @@ namespace nite
         ~StyledChar() = default;
     };
 
+    /**
+     * Represents a box border
+     */
     struct BoxBorder {
         StyledChar top_left, top, top_right;
         StyledChar left, right;
@@ -275,6 +281,9 @@ namespace nite
             {L'╯', {}},
     };
 
+    /**
+     * Represents a table border
+     */
     struct TableBorder {
         StyledChar vertical, horizontal;
         StyledChar top_left, top_right;
@@ -437,6 +446,9 @@ namespace nite
             {L'┴', {}},
     };
 
+    /**
+     * Represents scroll bar style
+     */
     struct ScrollBar {
         StyledChar home;
         StyledChar top, v_bar, v_node, bottom;
@@ -491,6 +503,9 @@ namespace nite
             {L'⇒', {}},
     };
 
+    /**
+     * Represents different alignment options
+     */
     enum class Align {
         TOP_LEFT,
         TOP,
@@ -728,6 +743,9 @@ namespace nite
 #define KEY_SUPER ((uint8_t) (1 << 3))    // Command on macOS, Win key on Windows, Super on other platforms
 #define KEY_META  ((uint8_t) (1 << 4))    // Meta key
 
+    /**
+     * Represents different supported key codes
+     */
     enum class KeyCode {
         // Alphabet keys
         K_A,
@@ -845,6 +863,7 @@ namespace nite
         SPACE,
     };
 
+    // TODO: debug thing do not use this
     struct KeyCodeInfo {
         KeyCodeInfo() = delete;
         KeyCodeInfo(const KeyCodeInfo &) = delete;
@@ -1158,8 +1177,28 @@ namespace nite
         }
     }    // namespace internal
 
+    /**
+     * @brief Polls an event
+     *
+     * Checks whether there are any pending events.
+     * If there is any event available, it is captured,
+     * saved in \p event and returns true. Otherwise, it
+     * does nothing to \p event and returns false.
+     * 
+     * \note This is a non-blocking call (not guaranteed). 
+     * But it is guaranteed that this call will not block longer than 5 milliseconds
+     * 
+     * @param [inout] state the console state to work on
+     * @param [out] event the captured event
+     * @return true if event was available
+     * @return false if there was no event available
+     */
     bool PollEvent(State &state, Event &event);
 
+    /**
+     * This concept defines a valid event handler
+     * @tparam Fn type of the event handler
+     */
     template<class Fn>
     concept Handler = internal::is_valid_handler<Fn>();
 
@@ -1172,6 +1211,16 @@ namespace nite
     template<class... Handlers>
     HandlerMechanism(Handlers...) -> HandlerMechanism<Handlers...>;
 
+    /**
+     * @brief Handles an event
+     * 
+     * This function handles \p event by using std::visit on the event.
+     * The handlers are provided by \p handlers . It is not necessary to handle
+     * every event, in that case a default fallback handler for those unhandled events will be called.
+     * 
+     * @param [in] event the event to be handled
+     * @param [in] handlers the handlers provided
+     */
     template<Handler... Handlers>
     inline void HandleEvent(Event event, Handlers &&...handlers) {
         if constexpr (internal::has_all_event_handlers<Handlers...>())
@@ -1201,9 +1250,16 @@ namespace nite
 
 namespace nite
 {
+    /**
+     * @brief Defines a miscellaneous handlers for XXXXInfo structs
+     * @tparam T the type of the struct
+     */
     template<typename T>
     using HandlerFn = std::function<void(T &)>;
 
+    /**
+     * Represents a library state
+     */
     struct State {
         struct StateImpl;
         std::unique_ptr<StateImpl> impl;
@@ -1248,7 +1304,13 @@ namespace nite
      */
     Size GetBufferSize(State &state);
     /**
-     * Returns the size of the current selected pane
+     * Returns the top_left position of the current selected pane (the most recent pane)
+     * @param [inout] state the console state to work on
+     * @return Size 
+     */
+    Position GetPanePosition(State &state);
+    /**
+     * Returns the size of the current selected pane (the most recent pane)
      * @param [inout] state the console state to work on
      * @return Size 
      */
@@ -1401,89 +1463,243 @@ namespace nite
      */
     void DrawLine(State &state, const Position start, const Position end, wchar_t fill, const Style style = {});
 
+    /**
+     * Creates a pane on the screen with the specified position and size.
+     *
+     * \note Position values used before the corresponding EndPane call 
+     * are always relative to the top_left position of this Pane
+     * 
+     * @param [inout] state the console state to work on
+     * @param [in] top_left the position of the top left corner of the pane
+     * @param [in] size the size of the pane
+     */
     void BeginPane(State &state, const Position top_left, const Size size);
 
     struct ScrollPaneInfo {
+        /// Position of the scroll pane (top left corner)
         Position pos = {};
+        /// Minimum size (actual viewport size) of the scroll pane
         Size min_size = {};
+        /// Maximum size (the maximum size of the content) of the scroll pane
         Size max_size = {};
+        /// Style of the scroll bar
         ScrollBar scroll_bar = SCROLL_DEFAULT;
+        /// Scroll factor of the scroll bar (the speed of scroll)
         float scroll_factor = 1.0f;
+        /// Whether vertical scroll bar should be displayed
         bool show_vscroll_bar = true;
+        /// Whether horizontal scroll bar should be displayed
         bool show_hscroll_bar = true;
+        /// Whether scroll bar home (back to top button) should be displayed
         bool show_scroll_home = true;
 
+        /// Handler triggered when vertical scroll occurs
         HandlerFn<ScrollPaneInfo> on_vscroll = {};
+        /// Handler triggered when horizontal scroll occurs
         HandlerFn<ScrollPaneInfo> on_hscroll = {};
     };
 
+    /**
+     * Creates a scroll pane on the screen with the specified information
+     * provided by the ScrollPaneInfo struct.
+     * 
+     * \note Position values used before the corresponding EndPane call 
+     * are always relative to the top_left position of this Pane
+     * 
+     * @param [inout] state the console state to work on
+     * @param [inout] pivot the scroll pivot of the scroll pane
+     * @param [in] info the scroll pane info
+     */
     void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info);
 
     struct GridPaneInfo {
+        /// Position of the grid pane (top left corner)
         Position pos = {};
+        /// Size of the grid pane
         Size size = {};
+        /// The proportions of column sizes (sum all items should be 100)
         std::vector<double> col_sizes = {100};
+        /// The proportions of row sizes (sum all items should be 100)
         std::vector<double> row_sizes = {100};
     };
 
+    /**
+     * Creates a grid pane on the screen with the specified information
+     * provided by the GridPaneInfo struct. The GridPane acts like a normal Pane
+     * if used without invoking BeginGridCell function. The BeginGridCell function
+     * is necessary to enable grid functionality of the GridPane.
+     *
+     * This function also calculates the top_left position and size of every grid cell
+     * by using the data provided by the proportions of col_sizes and row_sizes.
+     * 
+     * \note Position values used before the corresponding EndPane call 
+     * are always relative to the top_left position of this Pane
+     * 
+     * @param state the console state to work on
+     * @param info the grid pane info
+     */
     void BeginGridPane(State &state, GridPaneInfo info);
+    /**
+     * Creates a normal Pane on the screen. Sets the top_left position and size of the Pane
+     * of the \p col th and \p row th GridCell of the GridPane (as if the GridPane is divided into a table).
+     * 
+     * \note Position values used before the corresponding EndPane call 
+     * are always relative to the top_left position of this Pane
+     * 
+     * @param [inout] state the console state to work on
+     * @param [in] col the column index of the grid cell
+     * @param [in] row the row index of the grid cell
+     */
     void BeginGridCell(State &state, size_t col, size_t row);
 
+    /**
+     * Creates a NoPane on the screen. Any screen updates before the corresponding EndPane call
+     * are never registered and thus they are never shown.
+     *
+     * \note Position values used before the corresponding EndPane call 
+     * are always relative to the top_left position of this Pane
+     * 
+     * @param [inout] state the console state to work on
+     */
     void BeginNoPane(State &state);
 
+    /**
+     * Marks the end of the most recent Pane creation. This function should always be paired with
+     * BeginX calls that creates Pane. This can destroy any kind of Pane.
+     * @param [inout] state the console state to work on
+     */
     void EndPane(State &state);
 
-    void DrawBorder(State &state, const BoxBorder &border = BOX_BORDER_DEFAULT);
+    /**
+     * Draws the border of the current pane. 
+     * The border style is provided by \p border
+     * @param [inout] state the console state to work on
+     * @param [in] border the border style
+     */
+    void BeginBorder(State &state, const BoxBorder &border = BOX_BORDER_DEFAULT);
+    /**
+     * Marks the end of BeginBorder. This function increases 
+     * the position.x and position.y of the current pane by 1 
+     * and reduces size.width and size.height of the current pane by 2.
+     * @param [inout] state the console state to work on
+     */
+    void EndBorder(State &state);
+    /**
+     * Draws the border of the current pane with some optional text. 
+     * The border style is provided by \p border .
+     * This function increases the position.x and position.y of the current pane by 1 
+     * and reduces size.width and size.height of the current pane by 2.
+     * @param [inout] state the console state to work on
+     * @param [in] border the border style
+     * @param [in] text the optional text
+     */
+    void DrawBorder(State &state, const BoxBorder &border = BOX_BORDER_DEFAULT, const std::string &text = "");
+
+    /**
+     * Draws a horizontal divider at the specified row.
+     * @param state the console state to work on
+     * @param row the specified row position
+     * @param fill the fill char of the divider
+     * @param style the style of the divider
+     */
     void DrawHDivider(State &state, size_t row, wchar_t fill = L'─', Style style = {});
+    /**
+     * Draws a vertical divider at the specified col.
+     * @param state the console state to work on
+     * @param col the specified col position
+     * @param fill the fill char of the divider
+     * @param style the style of the divider
+     */
     void DrawVDivider(State &state, size_t col, wchar_t fill = L'│', Style style = {});
 
     struct TextInfo {
+        /// The text to display
         std::string text = {};
+        /// Position of the text
         Position pos = {};
+        /// Style of the text
         Style style = {};
+
+        /// Handler triggered when mouse is hovered
         HandlerFn<TextInfo> on_hover = {};
+        /// Handler triggered when mouse clicks on this
         HandlerFn<TextInfo> on_click = {};
+        /// Handler triggered when mouse double clicks on this
         HandlerFn<TextInfo> on_click2 = {};
+        /// Handler triggered when mouse right clicks on this
         HandlerFn<TextInfo> on_menu = {};
     };
 
     /**
-     * Displays text on the console window
+     * Displays text on the console window.
+     * This does not support multi-line text.
      * @param [inout] state the console state to work on
      * @param [in] info the text information provided
      */
     void Text(State &state, TextInfo info);
 
     struct TextBoxInfo {
+        /// The text to display
         std::string text = {};
+        /// Position of the text box
         Position pos = {};
+        /// Size of the text box
         Size size = {};
+        /// Style of the text box
         Style style = {};
+        /// Whether text should be wrapped
         bool wrap = true;
+        /// Alignment of the text inside the text box
         Align align = Align::TOP_LEFT;
 
+        /// Handler triggered when mouse is hovered
         HandlerFn<TextBoxInfo> on_hover = {};
+        /// Handler triggered when mouse clicks on this
         HandlerFn<TextBoxInfo> on_click = {};
+        /// Handler triggered when mouse double clicks on this
         HandlerFn<TextBoxInfo> on_click2 = {};
+        /// Handler triggered when mouse right clicks on this
         HandlerFn<TextBoxInfo> on_menu = {};
     };
 
+    /**
+     * Draws a text box with the specified info provided by \p info .
+     * This supports multi-line text.
+     * @param [inout] state the console state to work on
+     * @param [in] info the text box info
+     */
     void TextBox(State &state, TextBoxInfo info);
 
     struct RichTextBoxInfo {
+        /// The text to display (with style)
         std::vector<StyledChar> text = {};
+        /// Position of the rich text box
         Position pos = {};
+        /// Size of the rich text box
         Size size = {};
+        /// Default style of the rich text box
         Style style = {};
+        /// Whether text should be wrapped
         bool wrap = true;
+        /// Alignment of the text inside the text box
         Align align = Align::TOP_LEFT;
 
+        /// Handler triggered when mouse is hovered
         HandlerFn<RichTextBoxInfo> on_hover = {};
+        /// Handler triggered when mouse clicks on this
         HandlerFn<RichTextBoxInfo> on_click = {};
+        /// Handler triggered when mouse double clicks on this
         HandlerFn<RichTextBoxInfo> on_click2 = {};
+        /// Handler triggered when mouse right clicks on this
         HandlerFn<RichTextBoxInfo> on_menu = {};
     };
 
+    /**
+     * Draws a rich text box the specified info provided by \p info .
+     * This supports multi-line text.
+     * @param [inout] state the console state to work on
+     * @param [in] info the rich text box info
+     */
     void RichTextBox(State &state, RichTextBoxInfo info);
 
     // TODO: find a better way to describe progress bar motion
@@ -1528,9 +1744,13 @@ namespace nite
         std::vector<StyledChar> motion = {DEFAULT_MOTION.begin(), DEFAULT_MOTION.end()};
         Style style = {};
 
+        /// Handler triggered when mouse is hovered
         HandlerFn<ProgressBarInfo> on_hover = {};
+        /// Handler triggered when mouse clicks on this
         HandlerFn<ProgressBarInfo> on_click = {};
+        /// Handler triggered when mouse double clicks on this
         HandlerFn<ProgressBarInfo> on_click2 = {};
+        /// Handler triggered when mouse right clicks on this
         HandlerFn<ProgressBarInfo> on_menu = {};
     };
 
