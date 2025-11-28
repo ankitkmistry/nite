@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
+#include <format>
 #include <functional>
 #include <string>
 #include <memory>
@@ -622,7 +623,7 @@ namespace nite
             bool is_tty();
             Result clear();
             Result size(size_t &width, size_t &height);
-            Result print(const std::string &text);
+            Result print(const std::string &text = "");
 
             void set_style(const Style style);
             void gotoxy(const size_t col, const size_t row);
@@ -1630,7 +1631,7 @@ namespace nite
      */
     void DrawBorder(State &state, const BoxBorder &border = BOX_BORDER_DEFAULT, const std::string &text = "");
 
-    void AlignPane(State &state, const Align align);
+    Position GetAlignedPos(State &state, const Size size, const Align align);
 
     /**
      * Draws a horizontal divider at the specified row.
@@ -2038,3 +2039,36 @@ namespace nite
 
     void CheckBox(State &state, CheckBoxValue &value, CheckBoxInfo info);
 }    // namespace nite
+
+template<>
+struct std::formatter<nite::Position> {
+    constexpr auto parse(std::format_parse_context &ctx) {
+        return ctx.end();
+    }
+
+    auto format(const nite::Position &p, std::format_context &ctx) const {
+        return std::format_to(ctx.out(), "({}, {})", p.col, p.row);
+    }
+};
+
+template<>
+struct std::formatter<nite::Size> {
+    constexpr auto parse(std::format_parse_context &ctx) {
+        return ctx.end();
+    }
+
+    auto format(const nite::Size &s, std::format_context &ctx) const {
+        return std::format_to(ctx.out(), "({}, {})", s.width, s.height);
+    }
+};
+
+template<>
+struct std::formatter<nite::Color> {
+    constexpr auto parse(std::format_parse_context &ctx) {
+        return ctx.end();
+    }
+
+    auto format(const nite::Color &c, std::format_context &ctx) const {
+        return std::format_to(ctx.out(), "#{:02x}{:02x}{:02x}", c.r, c.g, c.b);
+    }
+};

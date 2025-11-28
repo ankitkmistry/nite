@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <cwchar>
+#include <format>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -550,10 +551,10 @@ namespace nite
         }
 
         bool set_cell(size_t col, size_t row, wchar_t value, const Style style) {
-            internal::Box &selected = get_current_box();
-            if (!selected.transform(col, row))
+            internal::Box &box = get_current_box();
+            if (!box.transform(col, row))
                 return false;
-            if (!selected.contains(col, row))
+            if (!box.contains(col, row))
                 return false;
 
             internal::CellBuffer &buffer = swapchain.back();
@@ -909,7 +910,7 @@ namespace nite
         int64_t vscroll_count = 0;
         int64_t hscroll_count = 0;
 
-        for (const Event &event: scroll_state.get_captured_events())
+        for (const Event &event: scroll_state.get_captured_events()) {
             HandleEvent(event, [&](const MouseEvent &ev) {
                 switch (ev.kind) {
                 case MouseEventKind::CLICK:
@@ -947,6 +948,7 @@ namespace nite
                     break;
                 }
             });
+        }
 
         scroll_horizontal(scroll_state.get_pivot(), info, hscroll_count);
         scroll_vertical(scroll_state.get_pivot(), info, vscroll_count);
@@ -1111,12 +1113,8 @@ namespace nite
         EndBorder(state);
     }
 
-    void AlignPane(State &state, const Align align) {
-        if (state.impl->box_stack_count() < 2)
-            return;
-
+    Position GetAlignedPos(State &state, const Size size, const Align align) {
         auto &current = state.impl->get_current_box();
-        const auto &parent = state.impl->get_parent_box();
 
         size_t col_start;
         size_t row_start;
@@ -1128,38 +1126,38 @@ namespace nite
             break;
         case Align::TOP:
             row_start = 0;
-            col_start = (parent.get_size().width - current.get_size().width) / 2;
+            col_start = (current.get_size().width - size.width) / 2;
             break;
         case Align::TOP_RIGHT:
             row_start = 0;
-            col_start = parent.get_size().width - current.get_size().width;
+            col_start = current.get_size().width - size.width;
             break;
         case Align::LEFT:
-            row_start = (parent.get_size().height - current.get_size().height) / 2;
+            row_start = (current.get_size().height - size.height) / 2;
             col_start = 0;
             break;
         case Align::CENTER:
-            row_start = (parent.get_size().height - current.get_size().height) / 2;
-            col_start = (parent.get_size().width - current.get_size().width) / 2;
+            row_start = (current.get_size().height - size.height) / 2;
+            col_start = (current.get_size().width - size.width) / 2;
             break;
         case Align::RIGHT:
-            row_start = (parent.get_size().height - current.get_size().height) / 2;
-            col_start = parent.get_size().width - current.get_size().width;
+            row_start = (current.get_size().height - size.height) / 2;
+            col_start = current.get_size().width - size.width;
             break;
         case Align::BOTTOM_LEFT:
-            row_start = parent.get_size().height - current.get_size().height;
+            row_start = current.get_size().height - size.height;
             col_start = 0;
             break;
         case Align::BOTTOM:
-            row_start = parent.get_size().height - current.get_size().height;
-            col_start = (parent.get_size().width - current.get_size().width) / 2;
+            row_start = current.get_size().height - size.height;
+            col_start = (current.get_size().width - size.width) / 2;
             break;
         case Align::BOTTOM_RIGHT:
-            row_start = parent.get_size().height - current.get_size().height;
-            col_start = parent.get_size().width - current.get_size().width;
+            row_start = current.get_size().height - size.height;
+            col_start = current.get_size().width - size.width;
             break;
         }
-        current.set_pos(parent.get_pos() + Position{.col = col_start, .row = row_start});
+        return current.get_pos() + Position{.col = col_start, .row = row_start};
     }
 
     void DrawHDivider(State &state, size_t row, wchar_t value, Style style) {

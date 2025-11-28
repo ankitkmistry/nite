@@ -333,7 +333,7 @@ void event_test(State &state) {
     BeginScrollPane(state, scroll_state, {
         .pos = {.col = 0,.row = 1},
         .min_size = {.width = size.width, .height = size.height - 1},
-        .max_size = {.width = size.width * 2, .height = size.height * 2},
+        .max_size = size * 2,
         .scroll_bar = SCROLL_LIGHT,
         .scroll_factor = 2,
     }); {
@@ -664,6 +664,42 @@ void checkbox_test(State &state) {
     EndDrawing(state);
 }
 
+void pane_align_test(State &state) {
+    static ScrollState scroll_state;
+
+    Event event;
+    while (PollEvent(state, event)) {
+        scroll_state.capture_event(event);
+        HandleEvent(event, [&] (const KeyEvent &ev) {
+            if (ev.key_down && ev.modifiers == 0 && ev.key_code == KeyCode::K_Q)
+                CloseWindow(state);
+        });
+    }
+
+    BeginDrawing(state); {
+        Size min_size = GetPaneSize(state) / 2;
+        Size max_size = GetPaneSize(state);
+        BeginScrollPane(state, scroll_state, {
+            .pos = GetAlignedPos(state, min_size, Align::CENTER),
+            .min_size = min_size,
+            .max_size = max_size,
+            .scroll_bar = SCROLL_LIGHT,
+            .scroll_factor = 2,
+        }); {
+            FillBackground(state, COLOR_AQUA);
+            // DrawHDivider(state, GetPaneSize(state).height / 2, L'─', Style{.fg = COLOR_RED, .mode = STYLE_NO_BG});
+            DrawLine(state, 
+                {.col = 0, .row = min_size.height / 2}, 
+                {.col = max_size.width / 2, .row = min_size.height / 2}, 
+                L'─', Style{.fg = COLOR_RED, .mode = STYLE_NO_BG});
+            DrawLine(state, 
+                {.col = max_size.width / 2, .row = min_size.height / 2}, 
+                {.col = max_size.width, .row = min_size.height / 2},
+                L'─', Style{.fg = COLOR_GREEN, .mode = STYLE_NO_BG});
+        } EndPane(state);
+    } EndDrawing(state);
+}
+
 // clang-format off
 
 int main() {
@@ -671,7 +707,7 @@ int main() {
     Initialize(state);
 
     while (!ShouldWindowClose(state)) {
-        event_test(state);
+        pane_align_test(state);
     }
 
     Cleanup();
