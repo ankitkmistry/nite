@@ -458,7 +458,7 @@ namespace nite
         // Render mechanism
         std::chrono::duration<double> delta_time;
         std::queue<internal::CellBuffer> swapchain;
-        std::vector<std::unique_ptr<internal::Box>> selected_stack;
+        std::vector<std::unique_ptr<internal::Box>> box_stack;
 
       public:
         // Events mechanism
@@ -484,8 +484,8 @@ namespace nite
 
         void push_buffer(const Size size) {
             swapchain.emplace(GetWindowSize());
-            selected_stack.clear();
-            selected_stack.push_back(std::make_unique<internal::StaticBox>(Position{}, size));
+            box_stack.clear();
+            emplace_box<internal::StaticBox>(Position{}, size);
         }
 
         size_t get_swapchain_count() const {
@@ -512,33 +512,33 @@ namespace nite
         template<typename BoxType, typename... BoxArgs>
             requires std::is_constructible_v<BoxType, BoxArgs...>
         void emplace_box(BoxArgs... args) {
-            selected_stack.push_back(std::make_unique<BoxType>(std::forward<BoxArgs>(args)...));
+            box_stack.push_back(std::make_unique<BoxType>(std::forward<BoxArgs>(args)...));
         }
 
         void push_box(std::unique_ptr<internal::Box> box) {
             if (box)
-                selected_stack.push_back(std::move(box));
+                box_stack.push_back(std::move(box));
             else
                 emplace_box<internal::NoBox>();
         }
 
         void pop_box() {
-            assert(!swapchain.empty() && "Box stack cannot be empty");
-            selected_stack.pop_back();
+            assert(!box_stack.empty() && "Box stack cannot be empty");
+            box_stack.pop_back();
         }
 
         internal::Box &get_current_box() {
-            assert(!swapchain.empty() && "Box stack cannot be empty");
-            return *selected_stack.back();
+            assert(!box_stack.empty() && "Box stack cannot be empty");
+            return *box_stack.back();
         }
 
         internal::Box &get_parent_box() {
-            assert(swapchain.size() >= 2 && "Box stack size must be >= 2");
-            return *selected_stack[swapchain.size() - 2];
+            assert(box_stack.size() >= 2 && "Box stack size must be >= 2");
+            return *box_stack[box_stack.size() - 2];
         }
 
         size_t box_stack_count() const {
-            return selected_stack.size();
+            return box_stack.size();
         }
 
         std::chrono::duration<double> get_delta_time() const {
@@ -843,10 +843,10 @@ namespace nite
             return;
         }
 
-        state.impl->emplace_box<internal::StaticBox>(state.impl->get_current_box().get_pos() + top_left, size);
+        state.impl->emplace_box<internal::StaticBox>(GetPanePosition(state) + top_left, size);
     }
 
-    static void scroll_vertical(Position &pivot, ScrollPaneInfo &info, intmax_t value) {
+    static void scroll_vertical(Position &pivot, ScrollPaneInfo &info, int64_t value) {
         if (!info.show_vscroll_bar)
             return;
 
@@ -856,7 +856,7 @@ namespace nite
         if (info.on_vscroll) {
             const intmax_t abs_value = std::abs(value);
             for (intmax_t i = 0; i < abs_value; i++)
-                info.on_vscroll(std::forward<ScrollPaneInfo &>(info));
+                info.on_vscroll(std::ref(info));
         }
         if (value > 0) {
             pivot.row += value;
@@ -870,7 +870,7 @@ namespace nite
             pivot.row = info.max_size.height - info.min_size.height - 1;
     }
 
-    static void scroll_horizontal(Position &pivot, ScrollPaneInfo &info, intmax_t value) {
+    static void scroll_horizontal(Position &pivot, ScrollPaneInfo &info, int64_t value) {
         if (!info.show_hscroll_bar)
             return;
 
@@ -880,7 +880,7 @@ namespace nite
         if (info.on_hscroll) {
             const intmax_t abs_value = std::abs(value);
             for (intmax_t i = 0; i < abs_value; i++)
-                info.on_hscroll(std::forward<ScrollPaneInfo &>(info));
+                info.on_hscroll(std::ref(info));
         }
         if (value > 0) {
             pivot.col += value;
@@ -894,7 +894,7 @@ namespace nite
             pivot.col = info.max_size.width - info.min_size.width - 1;
     }
 
-    void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info) {
+    void BeginScrollPane(State &state, ScrollState &scroll_state, ScrollPaneInfo info) {
         if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_current_box()); no_box) {
             state.impl->emplace_box<internal::NoBox>(*no_box);
             return;
@@ -902,8 +902,8 @@ namespace nite
 
         const auto mouse_pos = GetMouseRelPos(state);
         if (internal::StaticBox(state.impl->get_current_box().get_pos() + info.pos, info.min_size).contains(mouse_pos)) {
-            scroll_horizontal(pivot, info, GetMouseScrollH(state));
-            scroll_vertical(pivot, info, GetMouseScrollV(state));
+            scroll_horizontal(scroll_state.get_pivot(), info, GetMouseScrollH(state));
+            scroll_vertical(scroll_state.get_pivot(), info, GetMouseScrollV(state));
         }
 
         const auto left_scroll_btn = Position{.col = 0, .row = info.min_size.height - 1} + info.pos;
@@ -913,20 +913,30 @@ namespace nite
         const auto home_cell_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 1} + info.pos;
 
         if (mouse_pos == left_scroll_btn)
-            scroll_horizontal(pivot, info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+            scroll_horizontal(
+                    scroll_state.get_pivot(), info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT))
+            );
         if (mouse_pos == right_scroll_btn)
-            scroll_horizontal(pivot, info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+            scroll_horizontal(
+                    scroll_state.get_pivot(), info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT))
+            );
         if (mouse_pos == top_scroll_btn)
-            scroll_vertical(pivot, info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+            scroll_vertical(
+                    scroll_state.get_pivot(), info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT))
+            );
         if (mouse_pos == bottom_scroll_btn)
-            scroll_vertical(pivot, info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT)));
+            scroll_vertical(
+                    scroll_state.get_pivot(), info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT))
+            );
         if (mouse_pos == home_cell_btn && (IsMouseClicked(state, MouseButton::LEFT) || IsMouseDoubleClicked(state, MouseButton::LEFT)))
-            pivot = {};
+            scroll_state.set_pivot({});
 
         state.impl->emplace_box<internal::ScrollBox>(
                 info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar,
-                state.impl->get_current_box().get_pos() + info.pos, pivot, info.min_size, info.max_size
+                state.impl->get_current_box().get_pos() + info.pos, scroll_state.get_pivot(), info.min_size, info.max_size
         );
+
+        scroll_state.clear_captured_events();
     }
 
     void BeginGridPane(State &state, GridPaneInfo info) {
@@ -957,7 +967,7 @@ namespace nite
             row_progress += info.row_sizes[row] / 100.0;
         }
 
-        state.impl->emplace_box<internal::GridBox>(state.impl->get_current_box().get_pos() + info.pos, info.size, num_cols, num_rows, grid);
+        state.impl->emplace_box<internal::GridBox>(GetPanePosition(state) + info.pos, info.size, num_cols, num_rows, grid);
     }
 
     void BeginGridCell(State &state, size_t col, size_t row) {
@@ -1082,7 +1092,7 @@ namespace nite
     }
 
     void AlignPane(State &state, const Align align) {
-        if (state.impl->box_stack_count() <= 1)
+        if (state.impl->box_stack_count() < 2)
             return;
 
         auto &current = state.impl->get_current_box();
@@ -1145,17 +1155,17 @@ namespace nite
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
-                        info.on_click(std::forward<TextInfo &>(info));
+                        info.on_click(std::ref(info));
             } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
                 if (info.on_menu)
                     while (count--)
-                        info.on_menu(std::forward<TextInfo &>(info));
+                        info.on_menu(std::ref(info));
             } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click2)
                     while (count--)
-                        info.on_click2(std::forward<TextInfo &>(info));
+                        info.on_click2(std::ref(info));
             } else if (info.on_hover)
-                info.on_hover(std::forward<TextInfo &>(info));
+                info.on_hover(std::ref(info));
         }
 
         for (size_t i = 0; char c: info.text) {
@@ -1169,17 +1179,17 @@ namespace nite
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
-                        info.on_click(std::forward<RichTextInfo &>(info));
+                        info.on_click(std::ref(info));
             } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
                 if (info.on_menu)
                     while (count--)
-                        info.on_menu(std::forward<RichTextInfo &>(info));
+                        info.on_menu(std::ref(info));
             } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click2)
                     while (count--)
-                        info.on_click2(std::forward<RichTextInfo &>(info));
+                        info.on_click2(std::ref(info));
             } else if (info.on_hover)
-                info.on_hover(std::forward<RichTextInfo &>(info));
+                info.on_hover(std::ref(info));
         }
 
         for (size_t i = 0; StyledChar st_char: info.text) {
@@ -1380,17 +1390,17 @@ namespace nite
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
-                        info.on_click(std::forward<RichTextBoxInfo &>(info));
+                        info.on_click(std::ref(info));
             } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
                 if (info.on_menu)
                     while (count--)
-                        info.on_menu(std::forward<RichTextBoxInfo &>(info));
+                        info.on_menu(std::ref(info));
             } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click2)
                     while (count--)
-                        info.on_click2(std::forward<RichTextBoxInfo &>(info));
+                        info.on_click2(std::ref(info));
             } else if (info.on_hover)
-                info.on_hover(std::forward<RichTextBoxInfo &>(info));
+                info.on_hover(std::ref(info));
         }
 
         std::vector<std::vector<StyledChar>> lines;
@@ -1571,17 +1581,17 @@ namespace nite
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
-                        info.on_click(std::forward<ProgressBarInfo &>(info));
+                        info.on_click(std::ref(info));
             } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
                 if (info.on_menu)
                     while (count--)
-                        info.on_menu(std::forward<ProgressBarInfo &>(info));
+                        info.on_menu(std::ref(info));
             } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click2)
                     while (count--)
-                        info.on_click2(std::forward<ProgressBarInfo &>(info));
+                        info.on_click2(std::ref(info));
             } else if (info.on_hover)
-                info.on_hover(std::forward<ProgressBarInfo &>(info));
+                info.on_hover(std::ref(info));
         }
 
         double value = info.value;
@@ -1897,7 +1907,7 @@ namespace nite
     }
 
     void TextInput(State &state, TextInputState &text_state, TextInputInfo info) {
-        for (const auto &event: text_state.get_captured_events()) {
+        for (const Event &event: text_state.get_captured_events()) {
             HandleEvent(event, [&](const KeyEvent &ev) {
                 if (!ev.key_down)
                     return;
@@ -1980,7 +1990,7 @@ namespace nite
                 case KeyCode::ENTER:
                     if (info.handle_enter_as_event) {
                         if (info.on_enter)
-                            info.on_enter(std::forward<TextInputInfo &>(info));
+                            info.on_enter(std::ref(info));
                     } else if (ev.modifiers == 0) {
                         if (text_state.is_selected()) {
                             text_state.erase_selection();
@@ -2065,27 +2075,27 @@ namespace nite
             .on_hover =
                 [&](RichTextInfo &text_info) {
                     if (info.on_hover)
-                        info.on_hover(std::forward<CheckBoxInfo &>(info));
+                        info.on_hover(std::ref(info));
                     text_info.text = compute_check_box(value, info);
                 },
             .on_click =
                 [&](RichTextInfo &text_info) {
                     click_action();
                     if (info.on_click)
-                        info.on_click(std::forward<CheckBoxInfo &>(info));
+                        info.on_click(std::ref(info));
                     text_info.text = compute_check_box(value, info);
                 },
             .on_click2 =
                 [&](RichTextInfo &text_info) {
                     click_action();
                     if (info.on_click2)
-                        info.on_click2(std::forward<CheckBoxInfo &>(info));
+                        info.on_click2(std::ref(info));
                     text_info.text = compute_check_box(value, info);
                 },
             .on_menu =
                 [&](RichTextInfo &text_info) {
                     if (info.on_menu)
-                        info.on_menu(std::forward<CheckBoxInfo &>(info));
+                        info.on_menu(std::ref(info));
                     text_info.text = compute_check_box(value, info);
                 }
         });

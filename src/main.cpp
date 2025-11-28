@@ -58,9 +58,10 @@ std::string mod_str(uint8_t modifiers) {
 void hello_test(State &state) {
     static std::vector<std::string> lines;
     static std::string text;
-    static Position scroll_pivot;
+    static ScrollState scroll_state;
     Event event;
     while (PollEvent(state, event)) {
+        scroll_state.capture_event(event);
         HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
@@ -112,7 +113,7 @@ void hello_test(State &state) {
     });
     DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = COLOR_RED, .mode = STYLE_RESET | STYLE_BOLD});
 
-    BeginScrollPane(state, scroll_pivot, {
+    BeginScrollPane(state, scroll_state, {
         .pos = {.col = 0, .row = 4},
         .min_size = {.width = size.width,     .height = size.height - 4},
         .max_size = {.width = size.width * 2, .height = size.height * 2},
@@ -252,11 +253,12 @@ void grid_test(State &state) {
 }
 
 void event_test(State &state) {
-    static Position pivot;
+    static ScrollState scroll_state;
     static std::vector<std::string> lines;
 
     Event event;
     while (PollEvent(state, event)) {
+        scroll_state.capture_event(event);
         HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
@@ -328,7 +330,7 @@ void event_test(State &state) {
 
     const auto size = GetBufferSize(state);
     
-    BeginScrollPane(state, pivot, {
+    BeginScrollPane(state, scroll_state, {
         .pos = {.col = 0,.row = 1},
         .min_size = {.width = size.width, .height = size.height - 1},
         .max_size = {.width = size.width * 2, .height = size.height * 2},
@@ -466,7 +468,7 @@ int main1() {
 // clang-format off
 
 void rgb_image_test(State &state) {
-    static Position scroll_pivot;
+    static ScrollState scroll_state;
 
     static auto array = load_image_rgb("../res/horn of salvation.jpg");
     // static auto array = load_image_rgb("../res/musashi.jpg");
@@ -479,6 +481,7 @@ void rgb_image_test(State &state) {
 
     Event event;
     while (PollEvent(state, event)) {
+        scroll_state.capture_event(event);
         HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
@@ -493,7 +496,7 @@ void rgb_image_test(State &state) {
 
     const auto size = GetBufferSize(state);
 
-    BeginScrollPane(state, scroll_pivot, {
+    BeginScrollPane(state, scroll_state, {
         .pos = {},
         .min_size = size,
         .max_size = max_size,
@@ -510,12 +513,13 @@ void rgb_image_test(State &state) {
 }
 
 void image_test(State &state) {
-    static Position scroll_pivot;
+    static ScrollState scroll_state;
     static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 6, 10);
     // static ImageView image = down_scale(load_image("../res/musashi.jpg"), 6, 10);
 
     Event event;
     while (PollEvent(state, event)) {
+        scroll_state.capture_event(event);
         HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
@@ -531,7 +535,7 @@ void image_test(State &state) {
     const auto size = GetBufferSize(state);
     const Size max_size {.width = image.get_width(), .height = image.get_height()};
 
-    BeginScrollPane(state, scroll_pivot, {
+    BeginScrollPane(state, scroll_state, {
         .pos = {},
         .min_size = size,
         .max_size = max_size,
@@ -660,14 +664,14 @@ void checkbox_test(State &state) {
     EndDrawing(state);
 }
 
-// clang-format on
+// clang-format off
 
 int main() {
     auto &state = GetState();
     Initialize(state);
 
     while (!ShouldWindowClose(state)) {
-        align_test(state);
+        event_test(state);
     }
 
     Cleanup();

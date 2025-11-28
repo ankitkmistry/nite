@@ -1472,6 +1472,44 @@ namespace nite
      */
     void BeginPane(State &state, const Position top_left, const Size size);
 
+    class ScrollState {
+        Position pivot;
+        std::vector<Event> captured_evs;
+
+      public:
+        ScrollState() = default;
+        ScrollState(const ScrollState &) = default;
+        ScrollState(ScrollState &&) = default;
+        ScrollState &operator=(const ScrollState &) = default;
+        ScrollState &operator=(ScrollState &&) = default;
+        ~ScrollState() = default;
+
+        Position get_pivot() const {
+            return pivot;
+        }
+
+        Position &get_pivot() {
+            return pivot;
+        }
+
+        void set_pivot(const Position pos) {
+            pivot = pos;
+        }
+
+        const std::vector<Event> &get_captured_events() const {
+            return captured_evs;
+        }
+
+        void capture_event(const Event &event) {
+            if (std::holds_alternative<MouseEvent>(event))
+                captured_evs.push_back(event);
+        }
+
+        void clear_captured_events() {
+            captured_evs.clear();
+        }
+    };
+
     struct ScrollPaneInfo {
         /// Position of the scroll pane (top left corner)
         Position pos = {};
@@ -1504,10 +1542,10 @@ namespace nite
      * are always relative to the top_left position of this Pane
      * 
      * @param [inout] state the console state to work on
-     * @param [inout] pivot the scroll pivot of the scroll pane
+     * @param [inout] state the scroll state of the scroll pane
      * @param [in] info the scroll pane info
      */
-    void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info);
+    void BeginScrollPane(State &state, ScrollState &scroll_state, ScrollPaneInfo info);
 
     struct GridPaneInfo {
         /// Position of the grid pane (top left corner)
