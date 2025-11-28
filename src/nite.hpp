@@ -654,55 +654,40 @@ namespace nite
         class CellBuffer {
             size_t width;
             size_t height;
-            Cell *cells;
+            std::unique_ptr<Cell[]> cells;
 
           public:
             CellBuffer(size_t width, size_t height) : width(width), height(height) {
-                cells = new Cell[width * height]{};
+                cells = std::make_unique<Cell[]>(width * height);
             }
 
             CellBuffer(const Size size) : width(size.width), height(size.height) {
-                cells = new Cell[size.width * size.height]{};
+                cells = std::make_unique<Cell[]>(size.width * size.height);
             }
 
             CellBuffer(const CellBuffer &other) : width(other.width), height(other.height) {
-                const size_t new_length = width * height;
-                cells = new Cell[new_length];
-                for (size_t i = 0; i < new_length; i++) {
+                cells = std::make_unique<Cell[]>(width * height);
+                for (size_t i = 0; i < width * height; i++)
                     cells[i] = other.cells[i];
-                }
             }
 
-            CellBuffer(CellBuffer &&other) : width(other.width), height(other.height), cells(other.cells) {
-                other.cells = nullptr;
-            }
+            CellBuffer(CellBuffer &&other) = default;
 
             CellBuffer &operator=(const CellBuffer &other) {
+                if (this == &other)
+                    return *this;
+
                 width = other.width;
                 height = other.height;
 
-                delete[] cells;
-
-                const size_t new_length = width * height;
-                cells = new Cell[new_length];
-                for (size_t i = 0; i < new_length; i++) {
+                cells = std::make_unique<Cell[]>(width * height);
+                for (size_t i = 0; i < width * height; i++)
                     cells[i] = other.cells[i];
-                }
                 return *this;
             }
 
-            CellBuffer &operator=(CellBuffer &&other) {
-                width = other.width;
-                height = other.height;
-                cells = other.cells;
-
-                other.cells = nullptr;
-                return *this;
-            }
-
-            ~CellBuffer() {
-                delete[] cells;
-            }
+            CellBuffer &operator=(CellBuffer &&other) = default;
+            ~CellBuffer() = default;
 
             bool contains(size_t col, size_t row) const {
                 return col < width && row < height;
@@ -1250,7 +1235,8 @@ namespace nite
     bool IsMouseDoubleClicked(const State &state, const MouseButton button);
     size_t GetMouseClickCount(const State &state, const MouseButton button);
     size_t GetMouseClick2Count(const State &state, const MouseButton button);
-    Position GetMousePosition(const State &state);
+    Position GetMousePos(const State &state);
+    Position GetMouseRelPos(const State &state);
     intmax_t GetMouseScrollV(const State &state);
     intmax_t GetMouseScrollH(const State &state);
 }    // namespace nite
@@ -1272,7 +1258,7 @@ namespace nite
      * Represents a library state
      */
     struct State {
-        struct StateImpl;
+        class StateImpl;
         std::unique_ptr<StateImpl> impl;
 
         State(std::unique_ptr<StateImpl> impl);
@@ -1313,32 +1299,32 @@ namespace nite
      * @param [inout] state the console state to work on
      * @return Size 
      */
-    Size GetBufferSize(State &state);
+    Size GetBufferSize(const State &state);
     /**
      * Returns the top_left position of the current selected pane (the most recent pane)
      * @param [inout] state the console state to work on
      * @return Size 
      */
-    Position GetPanePosition(State &state);
+    Position GetPanePosition(const State &state);
     /**
      * Returns the size of the current selected pane (the most recent pane)
      * @param [inout] state the console state to work on
      * @return Size 
      */
-    Size GetPaneSize(State &state);
+    Size GetPaneSize(const State &state);
     /**
      * Returns the delta time in seconds
      * @param [inout] state the console state to work on
      * @return double 
      */
-    double GetDeltaTime(State &state);
+    double GetDeltaTime(const State &state);
     /**
      * Returns whether the console window should be closed
      * @param [inout] state the console state to work on
      * @return true if window is closed
      * @return false if window is not closed
      */
-    bool ShouldWindowClose(State &state);
+    bool ShouldWindowClose(const State &state);
 
     /**
      * Creates and pushes a new screen buffer to the swapchain
@@ -1605,6 +1591,8 @@ namespace nite
      * @param [in] text the optional text
      */
     void DrawBorder(State &state, const BoxBorder &border = BOX_BORDER_DEFAULT, const std::string &text = "");
+
+    void AlignPane(State &state, const Align align);
 
     /**
      * Draws a horizontal divider at the specified row.

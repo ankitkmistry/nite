@@ -142,7 +142,7 @@ void hello_test(State &state) {
         });
     } EndPane(state);
 
-    SetCell(state, ' ', GetMousePosition(state), {.bg = COLOR_SILVER});
+    SetCell(state, ' ', GetMousePos(state), {.bg = COLOR_SILVER});
 
     EndDrawing(state);
 }
@@ -564,8 +564,9 @@ void align_test(State &state) {
                 if (ev.key_down) {
                     if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
                         CloseWindow(state);
-                    if (ev.key_code == KeyCode::ENTER && ev.modifiers == 0)
+                    if (ev.key_code == KeyCode::ENTER && ev.modifiers == 0) {
                         align++;
+                    }
                 }
             }
         );
@@ -630,39 +631,43 @@ void input_test(State &state){
     EndDrawing(state);
 }
 
-// clang-format off
+void checkbox_test(State &state) {
+    static CheckBoxValue value = CheckBoxValue::UNCHECKED;
+    
+    Event event;
+    while (PollEvent(state, event)) {
+        HandleEvent(event, [&](const KeyEvent &ev) {
+            if (ev.key_down && ev.modifiers == 0) {
+                if (ev.key_code == KeyCode::F4 && ev.modifiers == 0)
+                    CloseWindow(state);
+            }
+        });
+    }
+
+    BeginDrawing(state);
+
+    CheckBox(state, value, {
+        .text = "Are you over 18?",
+        .pos = {.col = 0, .row = 0},
+        .allow_indeterm = true,
+    });
+
+    Text(state, {
+        .text = std::format("Value: {}", static_cast<int>(value)),
+        .pos = {.col = 0, .row = 1},
+    });
+
+    EndDrawing(state);
+}
+
+// clang-format on
 
 int main() {
     auto &state = GetState();
     Initialize(state);
 
-    CheckBoxValue value = CheckBoxValue::UNCHECKED;
-
     while (!ShouldWindowClose(state)) {
-        Event event;
-        while (PollEvent(state, event)) {
-            HandleEvent(event, [&](const KeyEvent &ev) {
-                if (ev.key_down && ev.modifiers == 0) {
-                    if (ev.key_code == KeyCode::F4 && ev.modifiers == 0)
-                        CloseWindow(state);
-                }
-            });
-        }
-
-        BeginDrawing(state);
-
-        CheckBox(state, value, {
-            .text = "Are you over 18?",
-            .pos = {.col = 0, .row = 0},
-            .allow_indeterm = true,
-        });
-
-        Text(state, {
-            .text = std::format("Value: {}", static_cast<int>(value)),
-            .pos = {.col = 0, .row = 1},
-        });
-
-        EndDrawing(state);
+        align_test(state);
     }
 
     Cleanup();

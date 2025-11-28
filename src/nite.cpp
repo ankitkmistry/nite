@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -11,7 +12,6 @@
 #include <memory>
 #include <optional>
 #include <queue>
-#include <stack>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -452,9 +452,15 @@ namespace nite
         size_t click2_count = 0;
     };
 
-    struct State::StateImpl {
+    class State::StateImpl {
         bool closed = false;
 
+        // Render mechanism
+        std::chrono::duration<double> delta_time;
+        std::queue<internal::CellBuffer> swapchain;
+        std::vector<std::unique_ptr<internal::Box>> selected_stack;
+
+      public:
         // Events mechanism
         std::unordered_map<KeyCode, KeyState> key_states;
 
@@ -465,19 +471,86 @@ namespace nite
         intmax_t mouse_scroll_v = 0;
         intmax_t mouse_scroll_h = 0;
 
-        // Render mechanism
-        std::chrono::duration<double> delta_time;
-        std::queue<internal::CellBuffer> swapchain;
-        std::stack<std::unique_ptr<internal::Box>> selected_stack;
-
+      public:
         StateImpl() = default;
 
-        internal::Box &get_selected() {
-            return *selected_stack.top();
+        bool is_closed() const {
+            return closed;
+        }
+
+        void set_closed(bool b) {
+            closed = b;
+        }
+
+        void push_buffer(const Size size) {
+            swapchain.emplace(GetWindowSize());
+            selected_stack.clear();
+            selected_stack.push_back(std::make_unique<internal::StaticBox>(Position{}, size));
+        }
+
+        size_t get_swapchain_count() const {
+            return swapchain.size();
+        }
+
+        internal::CellBuffer pop_current_buffer() {
+            assert(!swapchain.empty() && "Swapchain cannot be empty");
+            const internal::CellBuffer buf = swapchain.front();
+            swapchain.pop();
+            return buf;
+        }
+
+        internal::CellBuffer &get_current_buffer() {
+            assert(!swapchain.empty() && "Swapchain cannot be empty");
+            return swapchain.front();
+        }
+
+        const internal::CellBuffer &get_current_buffer() const {
+            assert(!swapchain.empty() && "Swapchain cannot be empty");
+            return swapchain.front();
+        }
+
+        template<typename BoxType, typename... BoxArgs>
+            requires std::is_constructible_v<BoxType, BoxArgs...>
+        void emplace_box(BoxArgs... args) {
+            selected_stack.push_back(std::make_unique<BoxType>(std::forward<BoxArgs>(args)...));
+        }
+
+        void push_box(std::unique_ptr<internal::Box> box) {
+            if (box)
+                selected_stack.push_back(std::move(box));
+            else
+                emplace_box<internal::NoBox>();
+        }
+
+        void pop_box() {
+            assert(!swapchain.empty() && "Box stack cannot be empty");
+            selected_stack.pop_back();
+        }
+
+        internal::Box &get_current_box() {
+            assert(!swapchain.empty() && "Box stack cannot be empty");
+            return *selected_stack.back();
+        }
+
+        internal::Box &get_parent_box() {
+            assert(swapchain.size() >= 2 && "Box stack size must be >= 2");
+            return *selected_stack[swapchain.size() - 2];
+        }
+
+        size_t box_stack_count() const {
+            return selected_stack.size();
+        }
+
+        std::chrono::duration<double> get_delta_time() const {
+            return delta_time;
+        }
+
+        void set_delta_time(std::chrono::duration<double> time) {
+            delta_time = time;
         }
 
         bool set_cell(size_t col, size_t row, wchar_t value, const Style style) {
-            internal::Box &selected = get_selected();
+            internal::Box &selected = get_current_box();
             if (!selected.transform(col, row))
                 return false;
             if (!selected.contains(col, row))
@@ -505,7 +578,7 @@ namespace nite
         internal::Cell &get_cell(size_t col, size_t row) {
             static internal::Cell sentinel;
 
-            internal::Box &selected = get_selected();
+            internal::Box &selected = get_current_box();
             col += selected.get_pos().col;
             row += selected.get_pos().row;
 
@@ -530,24 +603,24 @@ namespace nite
         return state;
     }
 
-    Size GetBufferSize(State &state) {
-        return state.impl->swapchain.back().size();
+    Size GetBufferSize(const State &state) {
+        return state.impl->get_current_buffer().size();
     }
 
-    Position GetPanePosition(State &state) {
-        return state.impl->get_selected().get_pos();
+    Position GetPanePosition(const State &state) {
+        return state.impl->get_current_box().get_pos();
     }
 
-    Size GetPaneSize(State &state) {
-        return state.impl->get_selected().get_size();
+    Size GetPaneSize(const State &state) {
+        return state.impl->get_current_box().get_size();
     }
 
-    double GetDeltaTime(State &state) {
-        return state.impl->delta_time.count();
+    double GetDeltaTime(const State &state) {
+        return state.impl->get_delta_time().count();
     }
 
-    bool ShouldWindowClose(State &state) {
-        return state.impl->closed;
+    bool ShouldWindowClose(const State &state) {
+        return state.impl->is_closed();
     }
 
     Result Initialize(State &state) {
@@ -556,7 +629,7 @@ namespace nite
         if (const auto result = internal::console::init(); !result)
             return result;
 
-        state.impl->closed = false;
+        state.impl->set_closed(false);
         return true;
     }
 
@@ -565,9 +638,7 @@ namespace nite
     }
 
     void BeginDrawing(State &state) {
-        internal::CellBuffer buf(GetWindowSize());
-        state.impl->swapchain.push(buf);
-        state.impl->selected_stack.push(std::make_unique<internal::StaticBox>(Position{.col = 0, .row = 0}, buf.size()));
+        state.impl->push_buffer(GetWindowSize());
     }
 
     void EndDrawing(State &state) {
@@ -576,15 +647,15 @@ namespace nite
         for (BtnState &btn_state: state.impl->btn_states)
             btn_state = {};
 
-        state.impl->selected_stack.pop();
+        state.impl->pop_box();
 
-        switch (state.impl->swapchain.size()) {
+        switch (state.impl->get_swapchain_count()) {
         case 0:
             break;
         case 1: {
             const auto start = std::chrono::high_resolution_clock::now();
 
-            const auto &cur_buf = state.impl->swapchain.front();
+            const auto &cur_buf = state.impl->get_current_buffer();
             const auto cur_size = cur_buf.size();
 
             for (size_t row = 0; row < cur_size.height; row++) {
@@ -595,17 +666,16 @@ namespace nite
             }
 
             const auto end = std::chrono::high_resolution_clock::now();
-            state.impl->delta_time = end - start;
+            state.impl->set_delta_time(end - start);
             break;
         }
         default: {
             const auto start = std::chrono::high_resolution_clock::now();
 
-            const auto prev_buf = std::move(state.impl->swapchain.front());
+            const auto prev_buf = state.impl->pop_current_buffer();
             const auto prev_size = prev_buf.size();
-            state.impl->swapchain.pop();
 
-            const auto &cur_buf = state.impl->swapchain.front();
+            const auto &cur_buf = state.impl->get_current_buffer();
             const auto cur_size = cur_buf.size();
 
             if (cur_size == prev_size) {
@@ -628,14 +698,14 @@ namespace nite
             }
 
             const auto end = std::chrono::high_resolution_clock::now();
-            state.impl->delta_time = end - start;
+            state.impl->set_delta_time(end - start);
             break;
         }
         }
     }
 
     void CloseWindow(State &state) {
-        state.impl->closed = true;
+        state.impl->set_closed(true);
     }
 
     void SetCell(State &state, wchar_t value, const Position position, const Style style) {
@@ -690,7 +760,7 @@ namespace nite
     }
 
     void FillBackground(State &state, const Color color) {
-        internal::Box &selected = state.impl->get_selected();
+        internal::Box &selected = state.impl->get_current_box();
 
         for (size_t row = 0; row < selected.get_size().height; row++)
             for (size_t col = 0; col < selected.get_size().width; col++) {
@@ -739,7 +809,7 @@ namespace nite
     }
 
     void FillForeground(State &state, const Color color) {
-        internal::Box &selected = state.impl->get_selected();
+        internal::Box &selected = state.impl->get_current_box();
 
         for (size_t row = 0; row < selected.get_size().height; row++)
             for (size_t col = 0; col < selected.get_size().width; col++) {
@@ -768,12 +838,12 @@ namespace nite
     }
 
     void BeginPane(State &state, const Position top_left, const Size size) {
-        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
-            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_current_box()); no_box) {
+            state.impl->emplace_box<internal::NoBox>(*no_box);
             return;
         }
 
-        state.impl->selected_stack.push(std::make_unique<internal::StaticBox>(state.impl->get_selected().get_pos() + top_left, size));
+        state.impl->emplace_box<internal::StaticBox>(state.impl->get_current_box().get_pos() + top_left, size);
     }
 
     static void scroll_vertical(Position &pivot, ScrollPaneInfo &info, intmax_t value) {
@@ -825,13 +895,13 @@ namespace nite
     }
 
     void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info) {
-        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
-            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_current_box()); no_box) {
+            state.impl->emplace_box<internal::NoBox>(*no_box);
             return;
         }
 
-        const auto mouse_pos = GetMousePosition(state) - state.impl->get_selected().get_pos();
-        if (internal::StaticBox(state.impl->get_selected().get_pos() + info.pos, info.min_size).contains(mouse_pos)) {
+        const auto mouse_pos = GetMouseRelPos(state);
+        if (internal::StaticBox(state.impl->get_current_box().get_pos() + info.pos, info.min_size).contains(mouse_pos)) {
             scroll_horizontal(pivot, info, GetMouseScrollH(state));
             scroll_vertical(pivot, info, GetMouseScrollV(state));
         }
@@ -853,17 +923,15 @@ namespace nite
         if (mouse_pos == home_cell_btn && (IsMouseClicked(state, MouseButton::LEFT) || IsMouseDoubleClicked(state, MouseButton::LEFT)))
             pivot = {};
 
-        state.impl->selected_stack.push(
-                std::make_unique<internal::ScrollBox>(
-                        info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar,
-                        state.impl->get_selected().get_pos() + info.pos, pivot, info.min_size, info.max_size
-                )
+        state.impl->emplace_box<internal::ScrollBox>(
+                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar,
+                state.impl->get_current_box().get_pos() + info.pos, pivot, info.min_size, info.max_size
         );
     }
 
     void BeginGridPane(State &state, GridPaneInfo info) {
-        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
-            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_current_box()); no_box) {
+            state.impl->emplace_box<internal::NoBox>(*no_box);
             return;
         }
 
@@ -889,28 +957,26 @@ namespace nite
             row_progress += info.row_sizes[row] / 100.0;
         }
 
-        state.impl->selected_stack.push(
-                std::make_unique<internal::GridBox>(state.impl->get_selected().get_pos() + info.pos, info.size, num_cols, num_rows, grid)
-        );
+        state.impl->emplace_box<internal::GridBox>(state.impl->get_current_box().get_pos() + info.pos, info.size, num_cols, num_rows, grid);
     }
 
     void BeginGridCell(State &state, size_t col, size_t row) {
-        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_selected()); no_box) {
-            state.impl->selected_stack.push(std::make_unique<internal::NoBox>(*no_box));
+        if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_current_box()); no_box) {
+            state.impl->emplace_box<internal::NoBox>(*no_box);
             return;
         }
-        if (const auto grid_box = dynamic_cast<internal::GridBox *>(&state.impl->get_selected()); grid_box)
-            state.impl->selected_stack.push(grid_box->get_grid_cell(col, row));
+        if (const auto grid_box = dynamic_cast<internal::GridBox *>(&state.impl->get_current_box()); grid_box)
+            state.impl->push_box(grid_box->get_grid_cell(col, row));
         else
-            state.impl->selected_stack.push(std::make_unique<internal::NoBox>());
+            state.impl->emplace_box<internal::NoBox>();
     }
 
     void BeginNoPane(State &state) {
-        state.impl->selected_stack.push(std::make_unique<internal::NoBox>());
+        state.impl->emplace_box<internal::NoBox>();
     }
 
     void EndPane(State &state) {
-        const internal::Box &box = state.impl->get_selected();
+        const internal::Box &box = state.impl->get_current_box();
         if (const auto scroll_box = dynamic_cast<const internal::ScrollBox *>(&box); scroll_box) {
             const auto &scroll = scroll_box->get_scroll_style();
             const auto max_size = scroll_box->get_max_size();
@@ -957,11 +1023,11 @@ namespace nite
                 DrawLine(state, node_start, {.col = node_start.col + node_width, .row = node_start.row}, scroll.h_node.value, scroll.h_node.style);
             }
         }
-        state.impl->selected_stack.pop();
+        state.impl->pop_box();
     }
 
     void BeginBorder(State &state, const BoxBorder &border) {
-        const internal::Box &selected = state.impl->get_selected();
+        const internal::Box &selected = state.impl->get_current_box();
 
         if (border.top_left.value != '\0')
             SetCell(state, border.top_left.value, {.col = 0, .row = 0}, border.top_left.style);
@@ -989,7 +1055,7 @@ namespace nite
     }
 
     void EndBorder(State &state) {
-        internal::Box &selected = state.impl->get_selected();
+        internal::Box &selected = state.impl->get_current_box();
 
         // Change this for convenience
         const size_t x = selected.get_pos().x;
@@ -1015,17 +1081,67 @@ namespace nite
         EndBorder(state);
     }
 
+    void AlignPane(State &state, const Align align) {
+        if (state.impl->box_stack_count() <= 1)
+            return;
+
+        auto &current = state.impl->get_current_box();
+        const auto &parent = state.impl->get_parent_box();
+
+        size_t col_start;
+        size_t row_start;
+
+        switch (align) {
+        case Align::TOP_LEFT:
+            row_start = 0;
+            col_start = 0;
+            break;
+        case Align::TOP:
+            row_start = 0;
+            col_start = (parent.get_size().width - current.get_size().width) / 2;
+            break;
+        case Align::TOP_RIGHT:
+            row_start = 0;
+            col_start = parent.get_size().width - current.get_size().width;
+            break;
+        case Align::LEFT:
+            row_start = (parent.get_size().height - current.get_size().height) / 2;
+            col_start = 0;
+            break;
+        case Align::CENTER:
+            row_start = (parent.get_size().height - current.get_size().height) / 2;
+            col_start = (parent.get_size().width - current.get_size().width) / 2;
+            break;
+        case Align::RIGHT:
+            row_start = (parent.get_size().height - current.get_size().height) / 2;
+            col_start = parent.get_size().width - current.get_size().width;
+            break;
+        case Align::BOTTOM_LEFT:
+            row_start = parent.get_size().height - current.get_size().height;
+            col_start = 0;
+            break;
+        case Align::BOTTOM:
+            row_start = parent.get_size().height - current.get_size().height;
+            col_start = (parent.get_size().width - current.get_size().width) / 2;
+            break;
+        case Align::BOTTOM_RIGHT:
+            row_start = parent.get_size().height - current.get_size().height;
+            col_start = parent.get_size().width - current.get_size().width;
+            break;
+        }
+        current.set_pos(parent.get_pos() + Position{.col = col_start, .row = row_start});
+    }
+
     void DrawHDivider(State &state, size_t row, wchar_t value, Style style) {
-        DrawLine(state, {.col = 0, .row = row}, {.col = state.impl->get_selected().get_size().width, .row = row}, value, style);
+        DrawLine(state, {.col = 0, .row = row}, {.col = state.impl->get_current_box().get_size().width, .row = row}, value, style);
     }
 
     void DrawVDivider(State &state, size_t col, wchar_t value, Style style) {
-        DrawLine(state, {.col = col, .row = 0}, {.col = col, .row = state.impl->get_selected().get_size().height}, value, style);
+        DrawLine(state, {.col = col, .row = 0}, {.col = col, .row = state.impl->get_current_box().get_size().height}, value, style);
     }
 
     void Text(State &state, TextInfo info) {
-        if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1})
-                    .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
+        if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1}).contains(GetMouseRelPos(state))) {
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
@@ -1049,8 +1165,7 @@ namespace nite
     }
 
     void RichText(State &state, RichTextInfo info) {
-        if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1})
-                    .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
+        if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1}).contains(GetMouseRelPos(state))) {
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
@@ -1074,21 +1189,21 @@ namespace nite
     }
 
     void TextBox(State &state, TextBoxInfo info) {
-        if (internal::StaticBox(info.pos, info.size).contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
+        if (internal::StaticBox(info.pos, info.size).contains(GetMouseRelPos(state))) {
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
-                        info.on_click(std::forward<TextBoxInfo &>(info));
+                        info.on_click(std::ref(info));
             } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
                 if (info.on_menu)
                     while (count--)
-                        info.on_menu(std::forward<TextBoxInfo &>(info));
+                        info.on_menu(std::ref(info));
             } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click2)
                     while (count--)
-                        info.on_click2(std::forward<TextBoxInfo &>(info));
+                        info.on_click2(std::ref(info));
             } else if (info.on_hover)
-                info.on_hover(std::forward<TextBoxInfo &>(info));
+                info.on_hover(std::ref(info));
         }
 
         std::vector<std::string> lines;
@@ -1261,7 +1376,7 @@ namespace nite
     }
 
     void RichTextBox(State &state, RichTextBoxInfo info) {
-        if (internal::StaticBox(info.pos, info.size).contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
+        if (internal::StaticBox(info.pos, info.size).contains(GetMouseRelPos(state))) {
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
@@ -1452,8 +1567,7 @@ namespace nite
     }
 
     void ProgressBar(State &state, ProgressBarInfo info) {
-        if (internal::StaticBox(info.pos, Size{.width = info.length, .height = 1})
-                    .contains(GetMousePosition(state) - state.impl->get_selected().get_pos())) {
+        if (internal::StaticBox(info.pos, Size{.width = info.length, .height = 1}).contains(GetMouseRelPos(state))) {
             if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
                 if (info.on_click)
                     while (count--)
@@ -1651,223 +1765,110 @@ namespace nite
     }
 
     static void format_styled_text(std::vector<StyledChar> &list, const char c, const Style style) {
+        std::string str;
         switch (c) {
         case '\x00':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'N', .style = style});
-            list.push_back(StyledChar{.value = 'U', .style = style});
-            list.push_back(StyledChar{.value = 'L', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<NUL>";
             break;
         case '\x01':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = 'O', .style = style});
-            list.push_back(StyledChar{.value = 'H', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<SOH>";
             break;
         case '\x02':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = 'T', .style = style});
-            list.push_back(StyledChar{.value = 'X', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<STX>";
             break;
         case '\x03':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = 'T', .style = style});
-            list.push_back(StyledChar{.value = 'X', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<ETX>";
             break;
         case '\x04':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = 'O', .style = style});
-            list.push_back(StyledChar{.value = 'T', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<EOT>";
             break;
         case '\x05':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = 'N', .style = style});
-            list.push_back(StyledChar{.value = 'Q', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<ENQ>";
             break;
         case '\x06':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'A', .style = style});
-            list.push_back(StyledChar{.value = 'C', .style = style});
-            list.push_back(StyledChar{.value = 'K', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<ACK>";
             break;
         case '\x07':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'B', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = 'L', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<BEL>";
             break;
         case '\x08':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'B', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<BS>";
             break;
         case '\x09':    // horizontal tab
-            list.push_back(StyledChar{.value = ' ', .style = style});
-            list.push_back(StyledChar{.value = ' ', .style = style});
-            list.push_back(StyledChar{.value = ' ', .style = style});
-            list.push_back(StyledChar{.value = ' ', .style = style});
+            str = "    ";
             break;
         case '\x0B':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'V', .style = style});
-            list.push_back(StyledChar{.value = 'T', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<VT>";
             break;
         case '\x0C':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'F', .style = style});
-            list.push_back(StyledChar{.value = 'F', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<FF>";
             break;
         case '\x0D':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'C', .style = style});
-            list.push_back(StyledChar{.value = 'R', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<CR>";
             break;
         case '\x0E':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = 'O', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<SO>";
             break;
         case '\x0F':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = 'I', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<SI>";
             break;
         case '\x10':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'D', .style = style});
-            list.push_back(StyledChar{.value = 'L', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<DLE>";
             break;
         case '\x11':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'D', .style = style});
-            list.push_back(StyledChar{.value = 'C', .style = style});
-            list.push_back(StyledChar{.value = '1', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<DC1>";
             break;
         case '\x12':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'D', .style = style});
-            list.push_back(StyledChar{.value = 'C', .style = style});
-            list.push_back(StyledChar{.value = '2', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<DC2>";
             break;
         case '\x13':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'D', .style = style});
-            list.push_back(StyledChar{.value = 'C', .style = style});
-            list.push_back(StyledChar{.value = '3', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<DC3>";
             break;
         case '\x14':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'D', .style = style});
-            list.push_back(StyledChar{.value = 'C', .style = style});
-            list.push_back(StyledChar{.value = '4', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<DC4>";
             break;
         case '\x15':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'N', .style = style});
-            list.push_back(StyledChar{.value = 'A', .style = style});
-            list.push_back(StyledChar{.value = 'K', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<NAK>";
             break;
         case '\x16':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = 'Y', .style = style});
-            list.push_back(StyledChar{.value = 'N', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<SYN>";
             break;
         case '\x17':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = 'T', .style = style});
-            list.push_back(StyledChar{.value = 'B', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<ETB>";
             break;
         case '\x18':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'C', .style = style});
-            list.push_back(StyledChar{.value = 'A', .style = style});
-            list.push_back(StyledChar{.value = 'N', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<CAN>";
             break;
         case '\x19':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = 'M', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<EM>";
             break;
         case '\x1A':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = 'U', .style = style});
-            list.push_back(StyledChar{.value = 'B', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<SUB>";
             break;
         case '\x1B':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = 'C', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<ESC>";
             break;
         case '\x1C':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'F', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<FS>";
             break;
         case '\x1D':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'G', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<GS>";
             break;
         case '\x1E':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'R', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<RS>";
             break;
         case '\x1F':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'U', .style = style});
-            list.push_back(StyledChar{.value = 'S', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<US>";
             break;
         case '\x7F':
-            list.push_back(StyledChar{.value = '<', .style = style});
-            list.push_back(StyledChar{.value = 'D', .style = style});
-            list.push_back(StyledChar{.value = 'E', .style = style});
-            list.push_back(StyledChar{.value = 'L', .style = style});
-            list.push_back(StyledChar{.value = '>', .style = style});
+            str = "<DEL>";
             break;
         default:
-            list.push_back(StyledChar{.value = c_to_wc(c), .style = style});
+            str = c;
             break;
         }
+        for (char c: str)
+            list.push_back(StyledChar{.value = c_to_wc(c), .style = style});
     }
 
     std::vector<StyledChar> TextInputState::process(
@@ -2021,17 +2022,17 @@ namespace nite
         case CheckBoxValue::UNCHECKED:
             result.push_back(info.check_box.unchecked);
             result.push_back({' ', info.check_box.unchecked.style});
-            result.push_back({' ', info.check_box.unchecked.style});
+            // result.push_back({' ', info.check_box.unchecked.style});
             break;
         case CheckBoxValue::CHECKED:
             result.push_back(info.check_box.checked);
             result.push_back({' ', info.check_box.checked.style});
-            result.push_back({' ', info.check_box.checked.style});
+            // result.push_back({' ', info.check_box.checked.style});
             break;
         case CheckBoxValue::INDETERMINATE:
             result.push_back(info.check_box.indeterm);
             result.push_back({' ', info.check_box.indeterm.style});
-            result.push_back({' ', info.check_box.indeterm.style});
+            // result.push_back({' ', info.check_box.indeterm.style});
             break;
         }
         for (char c: info.text)
@@ -2093,37 +2094,39 @@ namespace nite
 
     bool PollEvent(State &state, Event &event) {
         if (internal::PollRawEvent(event)) {
+            // clang-format off
             HandleEvent(
-                    event,
-                    [&](const KeyEvent &ev) {
-                        state.impl->key_states[ev.key_code] = KeyState{.printable = is_print(ev.key_char), .down = ev.key_down};
-                    },
-                    [&](const MouseEvent &ev) {
-                        switch (ev.kind) {
-                        case MouseEventKind::CLICK:
-                            state.impl->btn_states[static_cast<size_t>(ev.button)].click1_count++;
-                            break;
-                        case MouseEventKind::DOUBLE_CLICK:
-                            state.impl->btn_states[static_cast<size_t>(ev.button)].click2_count++;
-                            break;
-                        case MouseEventKind::MOVED:
-                            state.impl->mouse_pos = ev.pos;
-                            break;
-                        case MouseEventKind::SCROLL_DOWN:
-                            state.impl->mouse_scroll_v++;
-                            break;
-                        case MouseEventKind::SCROLL_UP:
-                            state.impl->mouse_scroll_v--;
-                            break;
-                        case MouseEventKind::SCROLL_LEFT:
-                            state.impl->mouse_scroll_h--;
-                            break;
-                        case MouseEventKind::SCROLL_RIGHT:
-                            state.impl->mouse_scroll_h++;
-                            break;
-                        }
+                event,
+                [&](const KeyEvent &ev) {
+                    state.impl->key_states[ev.key_code] = KeyState{.printable = is_print(ev.key_char), .down = ev.key_down};
+                },
+                [&](const MouseEvent &ev) {
+                    switch (ev.kind) {
+                    case MouseEventKind::CLICK:
+                        state.impl->btn_states[static_cast<size_t>(ev.button)].click1_count++;
+                        break;
+                    case MouseEventKind::DOUBLE_CLICK:
+                        state.impl->btn_states[static_cast<size_t>(ev.button)].click2_count++;
+                        break;
+                    case MouseEventKind::MOVED:
+                        state.impl->mouse_pos = ev.pos;
+                        break;
+                    case MouseEventKind::SCROLL_DOWN:
+                        state.impl->mouse_scroll_v++;
+                        break;
+                    case MouseEventKind::SCROLL_UP:
+                        state.impl->mouse_scroll_v--;
+                        break;
+                    case MouseEventKind::SCROLL_LEFT:
+                        state.impl->mouse_scroll_h--;
+                        break;
+                    case MouseEventKind::SCROLL_RIGHT:
+                        state.impl->mouse_scroll_h++;
+                        break;
                     }
+                }
             );
+            // clang-format on
             return true;
         }
         return false;
@@ -2161,8 +2164,12 @@ namespace nite
         return state.impl->btn_states[static_cast<size_t>(button)].click2_count;
     }
 
-    Position GetMousePosition(const State &state) {
+    Position GetMousePos(const State &state) {
         return state.impl->mouse_pos;
+    }
+
+    Position GetMouseRelPos(const State &state) {
+        return GetMousePos(state) - GetPanePosition(state);
     }
 
     intmax_t GetMouseScrollV(const State &state) {
@@ -4167,7 +4174,7 @@ namespace nite::internal
                 return true;
 
             index = old_index;
-            if (const auto result = parse_key_legacy(event))
+            if (const auto result = parse_key_leegacy(event))
                 return true;
             return false;
         }
