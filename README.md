@@ -44,7 +44,7 @@
 
 ## Example
 
-A minimal example using a TextBox with align is as follows
+A minimal example using a TextBox with align is as follows:
 
 ```cpp
 #include <nite.hpp>
@@ -52,10 +52,13 @@ A minimal example using a TextBox with align is as follows
 using namespace nite;
 
 int main() {
+    // Get the state to work on
     State &state = GetState();
+    // Initialize the terminal
     Initialize(state);
 
     while (!ShouldWindowClose(state)) {
+        // Look for events
         Event event;
         while (PollEvent(state, event)) {
             HandleEvent(event, 
@@ -79,6 +82,7 @@ int main() {
         EndDrawing(state);
     }
 
+    // Restore the terminal
     Cleanup();
     return 0;
 }
@@ -102,7 +106,7 @@ Currently, I intend to use only a small subset of C++ features:
 - I forbid the use of exceptions as they make error handling slow and messy. I use the `nite::Result` type instead
 - User API is simple. It makes use of C-style structural and procedural programming, though there is a little use of `dynamic_cast` (*I had to use it, there was no other way!!*)
 
-## Why is this is written in C++?
+## Why is this written in C++?
 This library is written in C++ for the following reasons:
 - Using C++20 is cool!
 - I need namespaces
@@ -110,17 +114,6 @@ This library is written in C++ for the following reasons:
 - I need RAII and memory management
 - I need C++ concepts
 - I need lambda expressions
-
-## Sanitizer Support
-To enable sanitizers for debugging, configure the project with the appropriate flags:
-- Address Sanitizer:
-  ```bash
-  cmake -B build -DENABLE_SANITIZER_ADDRESS=ON
-  ```
-- Undefined Behavior Sanitizer:
-  ```bash
-  cmake -B build -DENABLE_SANITIZER_UNDEFINED=ON
-  ```
 
 ## License
 This project is licensed under the MIT License. See the `LICENSE.txt` file for details.
