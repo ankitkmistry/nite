@@ -900,40 +900,60 @@ namespace nite
             return;
         }
 
-        const auto mouse_pos = GetMouseRelPos(state);
-        if (internal::StaticBox(state.impl->get_current_box().get_pos() + info.pos, info.min_size).contains(mouse_pos)) {
-            scroll_horizontal(scroll_state.get_pivot(), info, GetMouseScrollH(state));
-            scroll_vertical(scroll_state.get_pivot(), info, GetMouseScrollV(state));
-        }
-
         const auto left_scroll_btn = Position{.col = 0, .row = info.min_size.height - 1} + info.pos;
         const auto right_scroll_btn = Position{.col = info.min_size.width - 2, .row = info.min_size.height - 1} + info.pos;
         const auto top_scroll_btn = Position{.col = info.min_size.width - 1, .row = 0} + info.pos;
         const auto bottom_scroll_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 2} + info.pos;
         const auto home_cell_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 1} + info.pos;
 
-        if (mouse_pos == left_scroll_btn)
-            scroll_horizontal(
-                    scroll_state.get_pivot(), info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT))
-            );
-        if (mouse_pos == right_scroll_btn)
-            scroll_horizontal(
-                    scroll_state.get_pivot(), info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT))
-            );
-        if (mouse_pos == top_scroll_btn)
-            scroll_vertical(
-                    scroll_state.get_pivot(), info, -(GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT))
-            );
-        if (mouse_pos == bottom_scroll_btn)
-            scroll_vertical(
-                    scroll_state.get_pivot(), info, (GetMouseClickCount(state, MouseButton::LEFT) + GetMouseClick2Count(state, MouseButton::LEFT))
-            );
-        if (mouse_pos == home_cell_btn && (IsMouseClicked(state, MouseButton::LEFT) || IsMouseDoubleClicked(state, MouseButton::LEFT)))
-            scroll_state.set_pivot({});
+        int64_t vscroll_count = 0;
+        int64_t hscroll_count = 0;
+
+        for (const Event &event: scroll_state.get_captured_events())
+            HandleEvent(event, [&](const MouseEvent &ev) {
+                switch (ev.kind) {
+                case MouseEventKind::CLICK:
+                case MouseEventKind::DOUBLE_CLICK:
+                    if (ev.button != MouseButton::LEFT)
+                        break;
+                    if (ev.pos - GetPanePosition(state) == left_scroll_btn)
+                        hscroll_count--;
+                    if (ev.pos - GetPanePosition(state) == right_scroll_btn)
+                        hscroll_count++;
+                    if (ev.pos - GetPanePosition(state) == top_scroll_btn)
+                        vscroll_count--;
+                    if (ev.pos - GetPanePosition(state) == bottom_scroll_btn)
+                        vscroll_count++;
+                    if (ev.pos - GetPanePosition(state) == home_cell_btn)
+                        scroll_state.set_pivot({});
+                    break;
+                case MouseEventKind::SCROLL_DOWN:
+                    if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
+                        vscroll_count++;
+                    break;
+                case MouseEventKind::SCROLL_UP:
+                    if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
+                        vscroll_count--;
+                    break;
+                case MouseEventKind::SCROLL_LEFT:
+                    if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
+                        hscroll_count--;
+                    break;
+                case MouseEventKind::SCROLL_RIGHT:
+                    if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
+                        hscroll_count++;
+                    break;
+                case MouseEventKind::MOVED:
+                    break;
+                }
+            });
+
+        scroll_horizontal(scroll_state.get_pivot(), info, hscroll_count);
+        scroll_vertical(scroll_state.get_pivot(), info, vscroll_count);
 
         state.impl->emplace_box<internal::ScrollBox>(
-                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar,
-                state.impl->get_current_box().get_pos() + info.pos, scroll_state.get_pivot(), info.min_size, info.max_size
+                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, GetPanePosition(state) + info.pos,
+                scroll_state.get_pivot(), info.min_size, info.max_size
         );
 
         scroll_state.clear_captured_events();
