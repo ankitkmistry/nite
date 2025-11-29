@@ -1,7 +1,7 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
@@ -13,8 +13,10 @@
 #include <memory>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
+#include <type_traits>
 
 // --------------------------------
 //  Error definitions
@@ -597,12 +599,32 @@ namespace nite
         size_t width = 0;
         size_t height = 0;
 
+        Size operator+(const Size size) const {
+            return {.width = width + size.width, .height = height + size.height};
+        }
+
+        Size operator-(const Size size) const {
+            return {.width = width > size.width ? width - size.width : 0, .height = height > size.height ? height - size.height : 0};
+        }
+
         Size operator*(const size_t factor) const {
             return {.width = width * factor, .height = height * factor};
         }
 
         Size operator/(const size_t factor) const {
             return {.width = width / factor, .height = height / factor};
+        }
+
+        Size &operator+=(const Size size) {
+            width += size.width;
+            height += size.height;
+            return *this;
+        }
+
+        Size &operator-=(const Size size) {
+            width = width > size.width ? width - size.width : 0;
+            height = height > size.height ? height - size.height : 0;
+            return *this;
         }
 
         Size &operator*=(const size_t factor) {
@@ -1162,7 +1184,7 @@ namespace nite
 
         template<typename Fn, typename Event>
         consteval bool is_handler_of_this_event() {
-            return std::invocable<Fn, Event>;
+            return std::is_invocable_v<Fn, Event>;
         }
 
         template<typename Fn, std::size_t... I>
@@ -1249,14 +1271,8 @@ namespace nite
     bool IsKeyUp(const State &state, KeyCode key_code);
 
     // Mouse
-    bool IsMouseClicked(const State &state, const MouseButton button);
-    bool IsMouseDoubleClicked(const State &state, const MouseButton button);
-    size_t GetMouseClickCount(const State &state, const MouseButton button);
-    size_t GetMouseClick2Count(const State &state, const MouseButton button);
     Position GetMousePos(const State &state);
     Position GetMouseRelPos(const State &state);
-    intmax_t GetMouseScrollV(const State &state);
-    intmax_t GetMouseScrollH(const State &state);
 }    // namespace nite
 
 // --------------------------------
@@ -1490,44 +1506,6 @@ namespace nite
      */
     void BeginPane(State &state, const Position top_left, const Size size);
 
-    class ScrollState {
-        Position pivot;
-        std::vector<Event> captured_evs;
-
-      public:
-        ScrollState() = default;
-        ScrollState(const ScrollState &) = default;
-        ScrollState(ScrollState &&) = default;
-        ScrollState &operator=(const ScrollState &) = default;
-        ScrollState &operator=(ScrollState &&) = default;
-        ~ScrollState() = default;
-
-        Position get_pivot() const {
-            return pivot;
-        }
-
-        Position &get_pivot() {
-            return pivot;
-        }
-
-        void set_pivot(const Position pos) {
-            pivot = pos;
-        }
-
-        const std::vector<Event> &get_captured_events() const {
-            return captured_evs;
-        }
-
-        void capture_event(const Event &event) {
-            if (std::holds_alternative<MouseEvent>(event))
-                captured_evs.push_back(event);
-        }
-
-        void clear_captured_events() {
-            captured_evs.clear();
-        }
-    };
-
     struct ScrollPaneInfo {
         /// Position of the scroll pane (top left corner)
         Position pos = {};
@@ -1563,7 +1541,7 @@ namespace nite
      * @param [inout] state the scroll state of the scroll pane
      * @param [in] info the scroll pane info
      */
-    void BeginScrollPane(State &state, ScrollState &scroll_state, ScrollPaneInfo info);
+    void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info);
 
     struct GridPaneInfo {
         /// Position of the grid pane (top left corner)
@@ -1669,8 +1647,8 @@ namespace nite
 
     class FocusTable {
         std::list<std::string> keys;
-        std::unordered_map<std::string, bool> table;
-        std::list<std::string>::iterator focused = keys.end();
+        std::unordered_set<std::string> table;
+        std::list<std::string>::iterator focused = std::end(keys);
 
       public:
         FocusTable() = default;
@@ -1699,7 +1677,7 @@ namespace nite
         void clear() {
             keys.clear();
             table.clear();
-            focused = keys.end();
+            focused = std::end(keys);
         }
 
         /// Returns whether \p name exists in the table
@@ -1710,7 +1688,7 @@ namespace nite
         /// Removes the element with \p name
         void erase(const std::string &name) {
             if (*focused == name)
-                focused = keys.end();
+                focused = std::end(keys);
 
             keys.remove(name);
             table.erase(name);
@@ -1724,18 +1702,14 @@ namespace nite
         void set_focus(const std::string &name, bool focus) {
             if (table.find(name) == table.end())
                 keys.push_back(name);
-            table[name] = focus;
+            table.insert(name);
 
             if (focus) {
-                if (focused == keys.end() || *focused != name)
-                    for (auto it = keys.begin(); it != keys.end(); it++)
-                        if (*it == name) {
-                            focused = it;
-                            break;
-                        }
+                if (focused == std::end(keys) || *focused != name)
+                    focused = std::find(std::begin(keys), std::end(keys), name);
             } else {
-                if (focused != keys.end() && *focused == name)
-                    focused = keys.end();
+                if (focused != std::end(keys) && *focused == name)
+                    focused = std::end(keys);
             }
         }
 
@@ -1745,7 +1719,7 @@ namespace nite
          * @return false if \p name does not have focus
          */
         bool has_focus(const std::string &name) const {
-            return focused != keys.end() && *focused == name;
+            return focused != std::end(keys) && *focused == name;
         }
 
         /**
@@ -1753,7 +1727,7 @@ namespace nite
          * @return std::optional<std::string> 
          */
         std::optional<std::string> get_focus_name() const {
-            if (focused == keys.end())
+            if (focused == std::end(keys))
                 return std::nullopt;
             return *focused;
         }
@@ -1765,7 +1739,7 @@ namespace nite
          * @return false if focused element is not present
          */
         bool get_focus_name(std::string &name) const {
-            if (focused == keys.end())
+            if (focused == std::end(keys))
                 return false;
             name = *focused;
             return true;
@@ -1774,50 +1748,50 @@ namespace nite
         /// Focuses the first element
         void focus_front() {
             if (table.empty()) {
-                focused = keys.end();
+                focused = std::end(keys);
                 return;
             }
-            focused = keys.begin();
+            focused = std::begin(keys);
         }
 
         /// Focuses the last element
         void focus_back() {
             if (table.empty()) {
-                focused = keys.end();
+                focused = std::end(keys);
                 return;
             }
-            focused = keys.end();
+            focused = std::end(keys);
             focused--;
         }
 
         /// Focuses the next element
         void focus_next() {
             if (table.empty()) {
-                focused = keys.end();
+                focused = std::end(keys);
                 return;
             }
 
-            if (focused == keys.end())
-                focused = keys.begin();
+            if (focused == std::end(keys))
+                focused = std::begin(keys);
             else {
                 focused++;
-                if (focused == keys.end())
-                    focused = keys.begin();
+                if (focused == std::end(keys))
+                    focused = std::begin(keys);
             }
         }
 
         /// Focuses the previous element
         void focus_prev() {
             if (table.empty()) {
-                focused = keys.end();
+                focused = std::end(keys);
                 return;
             }
 
-            if (focused == keys.end())
-                focused = keys.begin();
+            if (focused == std::end(keys))
+                focused = std::begin(keys);
             else {
-                if (focused == keys.begin())
-                    focused = keys.end();
+                if (focused == std::begin(keys))
+                    focused = std::end(keys);
                 focused--;
             }
         }
@@ -1830,6 +1804,8 @@ namespace nite
         Position pos = {};
         /// Style of the text
         Style style = {};
+        /// Whether the thing is focused
+        bool focus = false;
 
         /// Handler triggered when mouse is hovered
         HandlerFn<TextInfo> on_hover = {};
@@ -1842,18 +1818,21 @@ namespace nite
     };
 
     /**
-     * Displays text on the console window.
+     * Displays text on the console window and returns the width of the text.
      * This does not support multi-line text.
      * @param [inout] state the console state to work on
      * @param [in] info the text information provided
+     * @return size_t 
      */
-    void Text(State &state, TextInfo info);
+    size_t Text(State &state, TextInfo info);
 
     struct RichTextInfo {
         /// The text to display (with style)
         std::vector<StyledChar> text = {};
         /// Position of the text
         Position pos = {};
+        /// Whether the thing is focused
+        bool focus = false;
 
         /// Handler triggered when mouse is hovered
         HandlerFn<RichTextInfo> on_hover = {};
@@ -1866,12 +1845,13 @@ namespace nite
     };
 
     /**
-     * Displays rich text on the console window.
+     * Displays rich text on the console window and returns the width of the text.
      * This does not support multi-line text.
      * @param [inout] state the console state to work on
      * @param [in] info the text information provided
+     * @return size_t 
      */
-    void RichText(State &state, RichTextInfo info);
+    size_t RichText(State &state, RichTextInfo info);
 
     struct TextBoxInfo {
         /// The text to display
@@ -1886,6 +1866,8 @@ namespace nite
         bool wrap = true;
         /// Alignment of the text inside the text box
         Align align = Align::TOP_LEFT;
+        /// Whether the thing is focused
+        bool focus = false;
 
         /// Handler triggered when mouse is hovered
         HandlerFn<TextBoxInfo> on_hover = {};
@@ -1918,6 +1900,8 @@ namespace nite
         bool wrap = true;
         /// Alignment of the text inside the text box
         Align align = Align::TOP_LEFT;
+        /// Whether the thing is focused
+        bool focus = false;
 
         /// Handler triggered when mouse is hovered
         HandlerFn<RichTextBoxInfo> on_hover = {};
@@ -1978,6 +1962,8 @@ namespace nite
         size_t length = 0;
         std::vector<StyledChar> motion = {DEFAULT_MOTION.begin(), DEFAULT_MOTION.end()};
         Style style = {};
+        /// Whether the thing is focused
+        bool focus = false;
 
         /// Handler triggered when mouse is hovered
         HandlerFn<ProgressBarInfo> on_hover = {};
@@ -1992,17 +1978,29 @@ namespace nite
     void ProgressBar(State &state, ProgressBarInfo info);
 
     struct SimpleTableInfo {
+        /// Data of the table
         std::vector<std::string> data = {};
+        /// Whether to treat the top row as table header row
         bool include_header_row = true;
+        /// Number columns in the table
         size_t num_cols = 0;
+        /// Number rows in the table
         size_t num_rows = 0;
 
+        /// Position of the table
         Position pos = {};
+        /// Header row style of the table
         Style header_style = {.mode = STYLE_BOLD};
+        /// Style of other cells of the table (not header row)
         Style table_style = {};
 
+        /// Whether to show borders
         bool show_border = false;
+        /// Border style of the table
         TableBorder border = TABLE_BORDER_DEFAULT;
+
+        /// Whether the thing is focused
+        bool focus = false;
     };
 
     /**
@@ -2022,8 +2020,6 @@ namespace nite
 
         bool selection_mode = false;
         size_t selection_pivot = 0;
-
-        std::vector<Event> captured_evs;
 
       public:
         TextInputState() = default;
@@ -2141,35 +2137,34 @@ namespace nite
                 cursor = data.size();
             cursor = index;
         }
-
-        const std::vector<Event> &get_captured_events() const {
-            return captured_evs;
-        }
-
-        void capture_event(const Event &event) {
-            if (std::holds_alternative<KeyEvent>(event))
-                captured_evs.push_back(event);
-        }
-
-        void clear_captured_events() {
-            captured_evs.clear();
-        }
     };
 
     struct TextInputInfo {
+        /// Position of the text input
         Position pos = {};
+        /// Size of the text input box
         Size size = {};
+        /// Whether text should be wrapped
         bool wrap = true;
+        /// Whether to handle enter as an event
+        bool handle_enter_as_event = false;
+        /// Alignment of the text in the text input box
         Align align = Align::TOP_LEFT;
+        /// Whether the thing is focused
+        bool focus = false;
 
+        /// Text style in normal mode
         Style text_style = {.bg = COLOR_BLACK, .fg = COLOR_WHITE};
+        /// Text style of selected text
         Style selection_style = {.bg = Color::from_hex(0x3737ac), .fg = COLOR_WHITE};
+        /// Cursor style in normal mode
         Style cursor_style = {.bg = COLOR_WHITE, .fg = COLOR_BLACK};
+        /// Cursor style in insert mode
         Style cursor_style_ins = {.bg = Color::from_hex(0xe63f32), .fg = COLOR_WHITE};
+        /// Cursor style in selection mode
         Style cursor_style_sel = {.bg = Color::from_hex(0x24acf2), .fg = COLOR_WHITE};
 
-        bool handle_enter_as_event = false;
-
+        /// Handler triggered when enter is pressed (only when handle_enter_as_event is true)
         HandlerFn<TextInputInfo> on_enter = {};
     };
 
@@ -2194,11 +2189,18 @@ namespace nite
     };
 
     struct CheckBoxInfo {
+        /// Text of the checkbox
         std::string text = "";
+        /// Position of the checkbox
         Position pos = {};
+        /// Style of the check box
         CheckBoxStyle check_box = CHECKBOX_DEFAULT;
+        /// Whether to allow indeterminate values
         bool allow_indeterm = false;
+        /// Style of the checkbox text
         Style style = {};
+        /// Whether the thing is focused
+        bool focus = false;
 
         /// Handler triggered when mouse is hovered
         HandlerFn<CheckBoxInfo> on_hover = {};

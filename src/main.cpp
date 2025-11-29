@@ -58,10 +58,9 @@ std::string mod_str(uint8_t modifiers) {
 void hello_test(State &state) {
     static std::vector<std::string> lines;
     static std::string text;
-    static ScrollState scroll_state;
+    static Position scroll_pivot;
     Event event;
     while (PollEvent(state, event)) {
-        scroll_state.capture_event(event);
         HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
@@ -113,7 +112,7 @@ void hello_test(State &state) {
     });
     DrawLine(state, {.col = 0, .row = 3}, {.col = size.width, .row = 3}, '-', {.fg = COLOR_RED, .mode = STYLE_RESET | STYLE_BOLD});
 
-    BeginScrollPane(state, scroll_state, {
+    BeginScrollPane(state, scroll_pivot, {
         .pos = {.col = 0, .row = 4},
         .min_size = {.width = size.width,     .height = size.height - 4},
         .max_size = {.width = size.width * 2, .height = size.height * 2},
@@ -177,12 +176,12 @@ void grid_test(State &state) {
             .text = "+ Col",
             .pos = {.col = 0, .row = 1},
             .on_click = 
-                    [&](const nite::TextInfo &) {
+                    [&](const TextInfo &) {
                         if (col_diff < 50)
                             col_diff++;
                     },
             .on_click2 = 
-                    [&](const nite::TextInfo &) {
+                    [&](const TextInfo &) {
                         if (col_diff < 50)
                             col_diff++;
                     },
@@ -191,12 +190,12 @@ void grid_test(State &state) {
             .text = "- Col",
             .pos = {.col = 6, .row = 1},
             .on_click =
-                    [&](const nite::TextInfo &) {
+                    [&](const TextInfo &) {
                         if (col_diff > -50)
                             col_diff--;
                     },
             .on_click2 =
-                    [&](const nite::TextInfo &) {
+                    [&](const TextInfo &) {
                         if (col_diff > -50)
                             col_diff--;
                     },
@@ -205,12 +204,12 @@ void grid_test(State &state) {
             .text = "+ Row",
             .pos = {.col = 0, .row = 2},
             .on_click =
-                    [&](const nite::TextInfo &) {
+                    [&](const TextInfo &) {
                         if (row_diff < 50)
                             row_diff++;
                     },
             .on_click2 =
-                    [&](const nite::TextInfo &) {
+                    [&](const TextInfo &) {
                         if (row_diff < 50)
                             row_diff++;
                     },
@@ -219,12 +218,12 @@ void grid_test(State &state) {
             .text = "- Row",
             .pos = {.col = 6, .row = 2},
             .on_click =
-                    [&](const nite::TextInfo &) {
+                    [&](const TextInfo &) {
                         if (row_diff > -50)
                             row_diff--;
                     },
             .on_click2 =
-                    [&](const nite::TextInfo &) {
+                    [&](const TextInfo &) {
                         if (row_diff > -50)
                             row_diff--;
                     },
@@ -253,12 +252,11 @@ void grid_test(State &state) {
 }
 
 void event_test(State &state) {
-    static ScrollState scroll_state;
+    static Position scroll_pivot;
     static std::vector<std::string> lines;
 
     Event event;
     while (PollEvent(state, event)) {
-        scroll_state.capture_event(event);
         HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
@@ -330,7 +328,7 @@ void event_test(State &state) {
 
     const auto size = GetBufferSize(state);
     
-    BeginScrollPane(state, scroll_state, {
+    BeginScrollPane(state, scroll_pivot, {
         .pos = {.col = 0,.row = 1},
         .min_size = {.width = size.width, .height = size.height - 1},
         .max_size = size * 2,
@@ -468,7 +466,7 @@ int main1() {
 // clang-format off
 
 void rgb_image_test(State &state) {
-    static ScrollState scroll_state;
+    static Position scroll_pivot;
 
     static auto array = load_image_rgb("../res/horn of salvation.jpg");
     // static auto array = load_image_rgb("../res/musashi.jpg");
@@ -481,7 +479,6 @@ void rgb_image_test(State &state) {
 
     Event event;
     while (PollEvent(state, event)) {
-        scroll_state.capture_event(event);
         HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
@@ -496,7 +493,7 @@ void rgb_image_test(State &state) {
 
     const auto size = GetBufferSize(state);
 
-    BeginScrollPane(state, scroll_state, {
+    BeginScrollPane(state, scroll_pivot, {
         .pos = {},
         .min_size = size,
         .max_size = max_size,
@@ -513,13 +510,12 @@ void rgb_image_test(State &state) {
 }
 
 void image_test(State &state) {
-    static ScrollState scroll_state;
+    static Position scroll_pivot;
     static ImageView image = down_scale(load_image("../res/horn of salvation.jpg"), 6, 10);
     // static ImageView image = down_scale(load_image("../res/musashi.jpg"), 6, 10);
 
     Event event;
     while (PollEvent(state, event)) {
-        scroll_state.capture_event(event);
         HandleEvent(event,
             [&](const KeyEvent &ev) {
                 if (ev.key_down) {
@@ -535,7 +531,7 @@ void image_test(State &state) {
     const auto size = GetBufferSize(state);
     const Size max_size {.width = image.get_width(), .height = image.get_height()};
 
-    BeginScrollPane(state, scroll_state, {
+    BeginScrollPane(state, scroll_pivot, {
         .pos = {},
         .min_size = size,
         .max_size = max_size,
@@ -610,7 +606,6 @@ void input_test(State &state){
 
     Event event;
     while (PollEvent(state, event)) {
-        text_state.capture_event(event);
 
         HandleEvent(event, [&](const KeyEvent &ev) {
             if (ev.key_down && ev.modifiers == 0) {
@@ -666,11 +661,10 @@ void checkbox_test(State &state) {
 
 void pane_align_test(State &state) {
     static size_t align = 0;
-    static ScrollState scroll_state;
+    static Position scroll_pivot;
 
     Event event;
     while (PollEvent(state, event)) {
-        scroll_state.capture_event(event);
         HandleEvent(event, [&] (const KeyEvent &ev) {
             if (ev.key_down && ev.modifiers == 0 && ev.key_code == KeyCode::K_Q)
                 CloseWindow(state);
@@ -684,7 +678,7 @@ void pane_align_test(State &state) {
     BeginDrawing(state); {
         Size min_size = GetPaneSize(state) / 2;
         Size max_size = GetPaneSize(state);
-        BeginScrollPane(state, scroll_state, {
+        BeginScrollPane(state, scroll_pivot, {
             .pos = GetAlignedPos(state, min_size, static_cast<Align>(align)),
             .min_size = min_size,
             .max_size = max_size,
@@ -711,8 +705,68 @@ int main() {
     auto &state = GetState();
     Initialize(state);
 
+    FocusTable table {"text1", "text2"};
+    table.focus_front();
+
+    TextInputState inpst1;
+    TextInputState inpst2;
+
     while (!ShouldWindowClose(state)) {
-        pane_align_test(state);
+        Event event;
+        while (PollEvent(state, event)) {
+            HandleEvent(event, [&] (const KeyEvent &ev) {
+                if (!ev.key_down) return;
+                if (ev.modifiers == 0 && ev.key_code == KeyCode::F1) 
+                    table.focus_next();
+                if (ev.modifiers == 0 && ev.key_code == KeyCode::F4)
+                    CloseWindow(state);
+            });
+        }
+
+        BeginDrawing(state);
+
+        TextBox(state, {
+            .text = std::format("text1: {} | text2: {}", table.has_focus("text1"), table.has_focus("text2")),
+            .pos = {},
+            .size = Size{.width = GetPaneSize(state).width, .height = 1},
+            .align = Align::CENTER,
+        });
+
+        BeginGridPane(state, {
+            .pos = {.col = 0, .row = 1},
+            .size = GetPaneSize(state) - Size{0,1},
+            .col_sizes = {50, 50},
+            .row_sizes = {100},
+        });
+        BeginGridCell(state, 0, 0); {
+            DrawBorder(state, BOX_BORDER_DOUBLE);
+            TextInput(state, inpst1, {
+                .pos = {},
+                .size = GetPaneSize(state),
+                .align = Align::CENTER,
+                .focus = table.has_focus("text1"),
+                .cursor_style = {.bg = table.has_focus("text1") ? COLOR_WHITE : COLOR_GRAY, .fg = COLOR_BLACK},
+                .cursor_style_sel = table.has_focus("text1") 
+                                    ? Style{.bg = Color::from_hex(0x24acf2), .fg = COLOR_WHITE} 
+                                    : Style{.bg = Color::from_hex(0x3737ac), .fg = COLOR_WHITE},
+            });
+        } EndPane(state);
+        BeginGridCell(state, 1, 0); {
+            DrawBorder(state, BOX_BORDER_LIGHT);
+            TextInput(state, inpst2, {
+                .pos = {},
+                .size = GetPaneSize(state),
+                .align = Align::BOTTOM_RIGHT,
+                .focus = table.has_focus("text2"),
+                .cursor_style = {.bg = table.has_focus("text2") ? COLOR_WHITE : COLOR_GRAY, .fg = COLOR_BLACK},
+                .cursor_style_sel = table.has_focus("text2") 
+                                    ? Style{.bg = Color::from_hex(0x24acf2), .fg = COLOR_WHITE} 
+                                    : Style{.bg = Color::from_hex(0x3737ac), .fg = COLOR_WHITE},
+            });
+        } EndPane(state);
+        EndPane(state);
+
+        EndDrawing(state);
     }
 
     Cleanup();

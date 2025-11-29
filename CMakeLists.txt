@@ -28,8 +28,6 @@ else ()
     target_compile_options (nite PRIVATE
         -Wall
         -Wextra
-        -Wunused
-        -Wunused-parameter
         -march=native
     )
 endif ()

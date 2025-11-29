@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -463,14 +462,10 @@ namespace nite
 
       public:
         // Events mechanism
+        std::list<Event> events;
+
         std::unordered_map<KeyCode, KeyState> key_states;
-
-        std::array<BtnState, 4> btn_states;
-        static_assert(4 == static_cast<int>(MouseButton::RIGHT) + 1, "Size of the array must match");
-
         Position mouse_pos;
-        intmax_t mouse_scroll_v = 0;
-        intmax_t mouse_scroll_h = 0;
 
       public:
         StateImpl() = default;
@@ -643,11 +638,7 @@ namespace nite
     }
 
     void EndDrawing(State &state) {
-        state.impl->mouse_scroll_v = 0;
-        state.impl->mouse_scroll_h = 0;
-        for (BtnState &btn_state: state.impl->btn_states)
-            btn_state = {};
-
+        state.impl->events.clear();
         state.impl->pop_box();
 
         switch (state.impl->get_swapchain_count()) {
@@ -895,7 +886,7 @@ namespace nite
             pivot.col = info.max_size.width - info.min_size.width - 1;
     }
 
-    void BeginScrollPane(State &state, ScrollState &scroll_state, ScrollPaneInfo info) {
+    void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info) {
         if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_current_box()); no_box) {
             state.impl->emplace_box<internal::NoBox>(*no_box);
             return;
@@ -910,7 +901,7 @@ namespace nite
         int64_t vscroll_count = 0;
         int64_t hscroll_count = 0;
 
-        for (const Event &event: scroll_state.get_captured_events()) {
+        for (const Event &event: state.impl->events) {
             HandleEvent(event, [&](const MouseEvent &ev) {
                 switch (ev.kind) {
                 case MouseEventKind::CLICK:
@@ -926,7 +917,7 @@ namespace nite
                     if (ev.pos - GetPanePosition(state) == bottom_scroll_btn)
                         vscroll_count++;
                     if (ev.pos - GetPanePosition(state) == home_cell_btn)
-                        scroll_state.set_pivot({});
+                        pivot = {};
                     break;
                 case MouseEventKind::SCROLL_DOWN:
                     if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
@@ -950,15 +941,13 @@ namespace nite
             });
         }
 
-        scroll_horizontal(scroll_state.get_pivot(), info, hscroll_count);
-        scroll_vertical(scroll_state.get_pivot(), info, vscroll_count);
+        scroll_horizontal(pivot, info, hscroll_count);
+        scroll_vertical(pivot, info, vscroll_count);
 
         state.impl->emplace_box<internal::ScrollBox>(
-                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, GetPanePosition(state) + info.pos,
-                scroll_state.get_pivot(), info.min_size, info.max_size
+                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, GetPanePosition(state) + info.pos, pivot,
+                info.min_size, info.max_size
         );
-
-        scroll_state.clear_captured_events();
     }
 
     void BeginGridPane(State &state, GridPaneInfo info) {
@@ -1168,71 +1157,126 @@ namespace nite
         DrawLine(state, {.col = col, .row = 0}, {.col = col, .row = state.impl->get_current_box().get_size().height}, value, style);
     }
 
-    void Text(State &state, TextInfo info) {
-        if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1}).contains(GetMouseRelPos(state))) {
-            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click)
-                    while (count--)
-                        info.on_click(std::ref(info));
-            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
-                if (info.on_menu)
-                    while (count--)
-                        info.on_menu(std::ref(info));
-            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click2)
-                    while (count--)
-                        info.on_click2(std::ref(info));
-            } else if (info.on_hover)
-                info.on_hover(std::ref(info));
-        }
+    size_t Text(State &state, TextInfo info) {
+        for (const auto &event: state.impl->events)
+            HandleEvent(event, [&](const MouseEvent &ev) {
+                switch (ev.kind) {
+                case MouseEventKind::CLICK:
+                case MouseEventKind::DOUBLE_CLICK:
+                    if (!internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1}).contains(ev.pos - GetPanePosition(state)))
+                        break;
+                    switch (ev.button) {
+                    case MouseButton::LEFT:
+                        if (ev.kind == MouseEventKind::DOUBLE_CLICK) {
+                            if (info.on_click2)
+                                info.on_click2(std::ref(info));
+                            else if (info.on_click)
+                                info.on_click(std::ref(info));
+                        }
+                        break;
+                    case MouseButton::RIGHT:
+                        if (info.on_menu)
+                            info.on_menu(std::ref(info));
+                        break;
+                    default:
+                        break;
+                    }
+                    break;
+                case MouseEventKind::MOVED:
+                    if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1}).contains(ev.pos - GetPanePosition(state)))
+                        if (info.on_hover)
+                            info.on_hover(std::ref(info));
+                    break;
+                default:
+                    break;
+                }
+            });
 
-        for (size_t i = 0; char c: info.text) {
-            state.impl->set_cell(info.pos.col + i, info.pos.row, c, info.style);
+        size_t i = 0;
+        for (wchar_t wc: str_to_wstr(info.text)) {
+            state.impl->set_cell(info.pos.col + i, info.pos.row, wc, info.style);
             i++;
         }
+        return i;
     }
 
-    void RichText(State &state, RichTextInfo info) {
-        if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1}).contains(GetMouseRelPos(state))) {
-            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click)
-                    while (count--)
-                        info.on_click(std::ref(info));
-            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
-                if (info.on_menu)
-                    while (count--)
-                        info.on_menu(std::ref(info));
-            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click2)
-                    while (count--)
-                        info.on_click2(std::ref(info));
-            } else if (info.on_hover)
-                info.on_hover(std::ref(info));
-        }
+    size_t RichText(State &state, RichTextInfo info) {
+        for (const auto &event: state.impl->events)
+            HandleEvent(event, [&](const MouseEvent &ev) {
+                switch (ev.kind) {
+                case MouseEventKind::CLICK:
+                case MouseEventKind::DOUBLE_CLICK:
+                    if (!internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1}).contains(ev.pos - GetPanePosition(state)))
+                        break;
+                    switch (ev.button) {
+                    case MouseButton::LEFT:
+                        if (ev.kind == MouseEventKind::DOUBLE_CLICK) {
+                            if (info.on_click2)
+                                info.on_click2(std::ref(info));
+                            else if (info.on_click)
+                                info.on_click(std::ref(info));
+                        }
+                        break;
+                    case MouseButton::RIGHT:
+                        if (info.on_menu)
+                            info.on_menu(std::ref(info));
+                        break;
+                    default:
+                        break;
+                    }
+                    break;
+                case MouseEventKind::MOVED:
+                    if (internal::StaticBox(info.pos, Size{.width = info.text.size(), .height = 1}).contains(ev.pos - GetPanePosition(state)))
+                        if (info.on_hover)
+                            info.on_hover(std::ref(info));
+                    break;
+                default:
+                    break;
+                }
+            });
 
-        for (size_t i = 0; StyledChar st_char: info.text) {
+        size_t i = 0;
+        for (StyledChar st_char: info.text) {
             state.impl->set_cell(info.pos.col + i, info.pos.row, st_char.value, st_char.style);
             i++;
         }
+        return i;
     }
 
     void TextBox(State &state, TextBoxInfo info) {
-        if (internal::StaticBox(info.pos, info.size).contains(GetMouseRelPos(state))) {
-            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click)
-                    while (count--)
-                        info.on_click(std::ref(info));
-            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
-                if (info.on_menu)
-                    while (count--)
-                        info.on_menu(std::ref(info));
-            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click2)
-                    while (count--)
-                        info.on_click2(std::ref(info));
-            } else if (info.on_hover)
-                info.on_hover(std::ref(info));
-        }
+        for (const auto &event: state.impl->events)
+            HandleEvent(event, [&](const MouseEvent &ev) {
+                switch (ev.kind) {
+                case MouseEventKind::CLICK:
+                case MouseEventKind::DOUBLE_CLICK:
+                    if (!internal::StaticBox(info.pos, info.size).contains(ev.pos - GetPanePosition(state)))
+                        break;
+                    switch (ev.button) {
+                    case MouseButton::LEFT:
+                        if (ev.kind == MouseEventKind::DOUBLE_CLICK) {
+                            if (info.on_click2)
+                                info.on_click2(std::ref(info));
+                            else if (info.on_click)
+                                info.on_click(std::ref(info));
+                        }
+                        break;
+                    case MouseButton::RIGHT:
+                        if (info.on_menu)
+                            info.on_menu(std::ref(info));
+                        break;
+                    default:
+                        break;
+                    }
+                    break;
+                case MouseEventKind::MOVED:
+                    if (internal::StaticBox(info.pos, info.size).contains(ev.pos - GetPanePosition(state)))
+                        if (info.on_hover)
+                            info.on_hover(std::ref(info));
+                    break;
+                default:
+                    break;
+                }
+            });
 
         std::vector<std::string> lines;
         // Split lines
@@ -1404,22 +1448,39 @@ namespace nite
     }
 
     void RichTextBox(State &state, RichTextBoxInfo info) {
-        if (internal::StaticBox(info.pos, info.size).contains(GetMouseRelPos(state))) {
-            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click)
-                    while (count--)
-                        info.on_click(std::ref(info));
-            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
-                if (info.on_menu)
-                    while (count--)
-                        info.on_menu(std::ref(info));
-            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click2)
-                    while (count--)
-                        info.on_click2(std::ref(info));
-            } else if (info.on_hover)
-                info.on_hover(std::ref(info));
-        }
+        for (const auto &event: state.impl->events)
+            HandleEvent(event, [&](const MouseEvent &ev) {
+                switch (ev.kind) {
+                case MouseEventKind::CLICK:
+                case MouseEventKind::DOUBLE_CLICK:
+                    if (!internal::StaticBox(info.pos, info.size).contains(ev.pos - GetPanePosition(state)))
+                        break;
+                    switch (ev.button) {
+                    case MouseButton::LEFT:
+                        if (ev.kind == MouseEventKind::DOUBLE_CLICK) {
+                            if (info.on_click2)
+                                info.on_click2(std::ref(info));
+                            else if (info.on_click)
+                                info.on_click(std::ref(info));
+                        }
+                        break;
+                    case MouseButton::RIGHT:
+                        if (info.on_menu)
+                            info.on_menu(std::ref(info));
+                        break;
+                    default:
+                        break;
+                    }
+                    break;
+                case MouseEventKind::MOVED:
+                    if (internal::StaticBox(info.pos, info.size).contains(ev.pos - GetPanePosition(state)))
+                        if (info.on_hover)
+                            info.on_hover(std::ref(info));
+                    break;
+                default:
+                    break;
+                }
+            });
 
         std::vector<std::vector<StyledChar>> lines;
         for (size_t start = 0, i = 0; i <= info.text.size(); i++) {
@@ -1595,22 +1656,39 @@ namespace nite
     }
 
     void ProgressBar(State &state, ProgressBarInfo info) {
-        if (internal::StaticBox(info.pos, Size{.width = info.length, .height = 1}).contains(GetMouseRelPos(state))) {
-            if (size_t count = GetMouseClickCount(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click)
-                    while (count--)
-                        info.on_click(std::ref(info));
-            } else if (size_t count = GetMouseClickCount(state, MouseButton::RIGHT); count > 0) {
-                if (info.on_menu)
-                    while (count--)
-                        info.on_menu(std::ref(info));
-            } else if (size_t count = GetMouseClick2Count(state, MouseButton::LEFT); count > 0) {
-                if (info.on_click2)
-                    while (count--)
-                        info.on_click2(std::ref(info));
-            } else if (info.on_hover)
-                info.on_hover(std::ref(info));
-        }
+        for (const auto &event: state.impl->events)
+            HandleEvent(event, [&](const MouseEvent &ev) {
+                switch (ev.kind) {
+                case MouseEventKind::CLICK:
+                case MouseEventKind::DOUBLE_CLICK:
+                    if (!internal::StaticBox(info.pos, Size{.width = info.length, .height = 1}).contains(ev.pos - GetPanePosition(state)))
+                        break;
+                    switch (ev.button) {
+                    case MouseButton::LEFT:
+                        if (ev.kind == MouseEventKind::DOUBLE_CLICK) {
+                            if (info.on_click2)
+                                info.on_click2(std::ref(info));
+                            else if (info.on_click)
+                                info.on_click(std::ref(info));
+                        }
+                        break;
+                    case MouseButton::RIGHT:
+                        if (info.on_menu)
+                            info.on_menu(std::ref(info));
+                        break;
+                    default:
+                        break;
+                    }
+                    break;
+                case MouseEventKind::MOVED:
+                    if (internal::StaticBox(info.pos, Size{.width = info.length, .height = 1}).contains(ev.pos - GetPanePosition(state)))
+                        if (info.on_hover)
+                            info.on_hover(std::ref(info));
+                    break;
+                default:
+                    break;
+                }
+            });
 
         double value = info.value;
         if (value < 0)
@@ -1925,110 +2003,111 @@ namespace nite
     }
 
     void TextInput(State &state, TextInputState &text_state, TextInputInfo info) {
-        for (const Event &event: text_state.get_captured_events()) {
-            HandleEvent(event, [&](const KeyEvent &ev) {
-                if (!ev.key_down)
-                    return;
-                switch (ev.key_code) {
-                case KeyCode::ESCAPE:
-                    text_state.end_selection();
-                    break;
-                case KeyCode::BACKSPACE:
-                    if (ev.modifiers == 0) {
-                        if (text_state.is_selected()) {
-                            text_state.erase_selection();
-                            text_state.end_selection();
-                        } else
-                            text_state.on_key_backspace();
-                    }
-                    break;
-                case KeyCode::DELETE:
-                    if (ev.modifiers == 0) {
-                        if (text_state.is_selected()) {
-                            text_state.erase_selection();
-                            text_state.end_selection();
-                        } else
-                            text_state.on_key_delete();
-                    }
-                    break;
-                case KeyCode::LEFT:
-                    if (ev.modifiers == 0) {
-                        if (text_state.is_selected()) {
-                            const auto selection_start = text_state.get_selection_range().first;
-                            text_state.end_selection();
-                            text_state.set_cursor(selection_start);
-                        } else
+        if (info.focus)
+            for (const Event &event: state.impl->events) {
+                HandleEvent(event, [&](const KeyEvent &ev) {
+                    if (!ev.key_down)
+                        return;
+                    switch (ev.key_code) {
+                    case KeyCode::ESCAPE:
+                        text_state.end_selection();
+                        break;
+                    case KeyCode::BACKSPACE:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                text_state.erase_selection();
+                                text_state.end_selection();
+                            } else
+                                text_state.on_key_backspace();
+                        }
+                        break;
+                    case KeyCode::DELETE:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                text_state.erase_selection();
+                                text_state.end_selection();
+                            } else
+                                text_state.on_key_delete();
+                        }
+                        break;
+                    case KeyCode::LEFT:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                const auto selection_start = text_state.get_selection_range().first;
+                                text_state.end_selection();
+                                text_state.set_cursor(selection_start);
+                            } else
+                                text_state.move_left();
+                        }
+                        if (ev.modifiers & KEY_SHIFT) {
+                            text_state.start_selection();
                             text_state.move_left();
-                    }
-                    if (ev.modifiers & KEY_SHIFT) {
-                        text_state.start_selection();
-                        text_state.move_left();
-                    }
-                    break;
-                case KeyCode::RIGHT:
-                    if (ev.modifiers == 0) {
-                        if (text_state.is_selected()) {
-                            const auto selection_end = text_state.get_selection_range().second;
-                            text_state.end_selection();
-                            text_state.set_cursor(selection_end);
-                        } else
+                        }
+                        break;
+                    case KeyCode::RIGHT:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                const auto selection_end = text_state.get_selection_range().second;
+                                text_state.end_selection();
+                                text_state.set_cursor(selection_end);
+                            } else
+                                text_state.move_right();
+                        }
+                        if (ev.modifiers & KEY_SHIFT) {
+                            text_state.start_selection();
                             text_state.move_right();
-                    }
-                    if (ev.modifiers & KEY_SHIFT) {
-                        text_state.start_selection();
-                        text_state.move_right();
-                    }
-                    break;
-                case KeyCode::HOME:
-                    if (ev.modifiers == 0) {
-                        if (text_state.is_selected())
-                            text_state.end_selection();
-                        text_state.go_home();
-                    }
-                    if (ev.modifiers & KEY_SHIFT) {
-                        text_state.start_selection();
-                        text_state.go_home();
-                    }
-                    break;
-                case KeyCode::END:
-                    if (ev.modifiers == 0) {
-                        if (text_state.is_selected())
-                            text_state.end_selection();
-                        text_state.go_end();
-                    }
-                    if (ev.modifiers & KEY_SHIFT) {
-                        text_state.start_selection();
-                        text_state.go_end();
-                    }
-                    break;
-                case KeyCode::INSERT:
-                    if (ev.modifiers == 0)
-                        text_state.toggle_insert_mode();
-                    break;
-                case KeyCode::ENTER:
-                    if (info.handle_enter_as_event) {
-                        if (info.on_enter)
-                            info.on_enter(std::ref(info));
-                    } else if (ev.modifiers == 0) {
-                        if (text_state.is_selected()) {
-                            text_state.erase_selection();
-                            text_state.end_selection();
                         }
-                        text_state.insert_char('\n');
-                    }
-                    break;
-                default:
-                    if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
-                        if (text_state.is_selected()) {
-                            text_state.erase_selection();
-                            text_state.end_selection();
+                        break;
+                    case KeyCode::HOME:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected())
+                                text_state.end_selection();
+                            text_state.go_home();
                         }
-                        text_state.insert_char(ev.key_char);
+                        if (ev.modifiers & KEY_SHIFT) {
+                            text_state.start_selection();
+                            text_state.go_home();
+                        }
+                        break;
+                    case KeyCode::END:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected())
+                                text_state.end_selection();
+                            text_state.go_end();
+                        }
+                        if (ev.modifiers & KEY_SHIFT) {
+                            text_state.start_selection();
+                            text_state.go_end();
+                        }
+                        break;
+                    case KeyCode::INSERT:
+                        if (ev.modifiers == 0)
+                            text_state.toggle_insert_mode();
+                        break;
+                    case KeyCode::ENTER:
+                        if (info.handle_enter_as_event) {
+                            if (info.on_enter)
+                                info.on_enter(std::ref(info));
+                        } else if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                text_state.erase_selection();
+                                text_state.end_selection();
+                            }
+                            text_state.insert_char('\n');
+                        }
+                        break;
+                    default:
+                        if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
+                            if (text_state.is_selected()) {
+                                text_state.erase_selection();
+                                text_state.end_selection();
+                            }
+                            text_state.insert_char(ev.key_char);
+                        }
+                        break;
                     }
-                    break;
-                }
-            });
-        }
+                });
+            }
 
         // clang-format off
         RichTextBox(state, {
@@ -2040,8 +2119,6 @@ namespace nite
             .align = info.align,
         });
         // clang-format on
-
-        text_state.clear_captured_events();
     }
 
     std::vector<StyledChar> compute_check_box(CheckBoxValue &value, const CheckBoxInfo &info) {
@@ -2086,6 +2163,16 @@ namespace nite
             }
         };
 
+        if (info.focus)
+            for (const auto &event: state.impl->events)
+                HandleEvent(event, [&](const KeyEvent &ev) {
+                    if (ev.key_down && ev.modifiers == 0 && ev.key_code == KeyCode::ENTER) {
+                        click_action();
+                        if (info.on_click)
+                            info.on_click(std::ref(info));
+                    }
+                });
+
         // clang-format off
         RichText(state, {
             .text = compute_check_box(value, info),
@@ -2115,13 +2202,14 @@ namespace nite
                     if (info.on_menu)
                         info.on_menu(std::ref(info));
                     text_info.text = compute_check_box(value, info);
-                }
+                }    
         });
         // clang-format on
     }
 
     bool PollEvent(State &state, Event &event) {
         if (internal::PollRawEvent(event)) {
+            state.impl->events.push_back(event);
             // clang-format off
             HandleEvent(
                 event,
@@ -2130,26 +2218,10 @@ namespace nite
                 },
                 [&](const MouseEvent &ev) {
                     switch (ev.kind) {
-                    case MouseEventKind::CLICK:
-                        state.impl->btn_states[static_cast<size_t>(ev.button)].click1_count++;
-                        break;
-                    case MouseEventKind::DOUBLE_CLICK:
-                        state.impl->btn_states[static_cast<size_t>(ev.button)].click2_count++;
-                        break;
                     case MouseEventKind::MOVED:
                         state.impl->mouse_pos = ev.pos;
                         break;
-                    case MouseEventKind::SCROLL_DOWN:
-                        state.impl->mouse_scroll_v++;
-                        break;
-                    case MouseEventKind::SCROLL_UP:
-                        state.impl->mouse_scroll_v--;
-                        break;
-                    case MouseEventKind::SCROLL_LEFT:
-                        state.impl->mouse_scroll_h--;
-                        break;
-                    case MouseEventKind::SCROLL_RIGHT:
-                        state.impl->mouse_scroll_h++;
+                    default:
                         break;
                     }
                 }
@@ -2176,36 +2248,12 @@ namespace nite
         return !IsKeyDown(state, key_code);
     }
 
-    bool IsMouseClicked(const State &state, const MouseButton button) {
-        return state.impl->btn_states[static_cast<size_t>(button)].click1_count > 0;
-    }
-
-    bool IsMouseDoubleClicked(const State &state, const MouseButton button) {
-        return state.impl->btn_states[static_cast<size_t>(button)].click2_count > 0;
-    }
-
-    size_t GetMouseClickCount(const State &state, const MouseButton button) {
-        return state.impl->btn_states[static_cast<size_t>(button)].click1_count;
-    }
-
-    size_t GetMouseClick2Count(const State &state, const MouseButton button) {
-        return state.impl->btn_states[static_cast<size_t>(button)].click2_count;
-    }
-
     Position GetMousePos(const State &state) {
         return state.impl->mouse_pos;
     }
 
     Position GetMouseRelPos(const State &state) {
         return GetMousePos(state) - GetPanePosition(state);
-    }
-
-    intmax_t GetMouseScrollV(const State &state) {
-        return state.impl->mouse_scroll_v;
-    }
-
-    intmax_t GetMouseScrollH(const State &state) {
-        return state.impl->mouse_scroll_h;
     }
 }    // namespace nite
 
@@ -4308,7 +4356,7 @@ namespace nite::internal
     bool PollRawEvent(Event &event) {
         static std::queue<Event> pending_events = []() {
             // See: man 2 sigaction
-            static struct sigaction sa {};
+            static struct sigaction sa{};
             sa.sa_flags = 0;
             sigemptyset(&sa.sa_mask);
             sa.sa_handler = [](int) { pending_events.push(ResizeEvent{GetWindowSize()}); };
