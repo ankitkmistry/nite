@@ -7,8 +7,11 @@
 #include <ctime>
 #include <format>
 #include <functional>
+#include <initializer_list>
+#include <optional>
 #include <string>
 #include <memory>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 
@@ -33,10 +36,17 @@ namespace nite
         bool success;
         std::string message;
 
-      public:
         Result(const std::string &message) : success(false), message(message) {}
 
         Result(bool success) : success(success), message() {}
+
+      public:
+        static const Result Ok;
+
+        template<typename... Args>
+        static Result Error(std::format_string<Args...> msg, Args... args) {
+            return Result(std::format<Args...>(msg, std::forward<Args>(args)...));
+        }
 
         Result() = delete;
         Result(const Result &) = default;
@@ -53,6 +63,8 @@ namespace nite
             return message;
         }
     };
+
+    inline const Result Result::Ok = Result(true);
 }    // namespace nite
 
 // --------------------------------
@@ -1649,6 +1661,162 @@ namespace nite
      * @param style the style of the divider
      */
     void DrawVDivider(State &state, size_t col, wchar_t fill = L'│', Style style = {});
+
+    class FocusTable {
+        std::list<std::string> keys;
+        std::unordered_map<std::string, bool> table;
+        std::list<std::string>::iterator focused = keys.end();
+
+      public:
+        FocusTable() = default;
+        FocusTable(const FocusTable &) = default;
+        FocusTable(FocusTable &&) = default;
+        FocusTable &operator=(const FocusTable &) = default;
+        FocusTable &operator=(FocusTable &&) = default;
+        ~FocusTable() = default;
+
+        FocusTable(std::initializer_list<std::string> list) {
+            for (const std::string &name: list)
+                set_focus(name, false);
+        }
+
+        /// Returns whether the table is empty
+        bool empty() const {
+            return table.empty();
+        }
+
+        /// Returns the size of the table
+        size_t size() const {
+            return table.size();
+        }
+
+        /// Clears the entire table and nothing is focused
+        void clear() {
+            keys.clear();
+            table.clear();
+            focused = keys.end();
+        }
+
+        /// Returns whether \p name exists in the table
+        bool contains(const std::string &name) const {
+            return table.find(name) != table.end();
+        }
+
+        /// Removes the element with \p name
+        void erase(const std::string &name) {
+            if (*focused == name)
+                focused = keys.end();
+
+            keys.remove(name);
+            table.erase(name);
+        }
+
+        /**
+         * Sets focus to the name
+         * @param name the name of the element
+         * @param focus the focus value
+         */
+        void set_focus(const std::string &name, bool focus) {
+            if (table.find(name) == table.end())
+                keys.push_back(name);
+            table[name] = focus;
+
+            if (focus) {
+                if (focused == keys.end() || *focused != name)
+                    for (auto it = keys.begin(); it != keys.end(); it++)
+                        if (*it == name) {
+                            focused = it;
+                            break;
+                        }
+            } else {
+                if (focused != keys.end() && *focused == name)
+                    focused = keys.end();
+            }
+        }
+
+        /**
+         * @param name the name of the element
+         * @return true if \p name has focus
+         * @return false if \p name does not have focus
+         */
+        bool has_focus(const std::string &name) const {
+            return focused != keys.end() && *focused == name;
+        }
+
+        /**
+         * Returns the name of the focused element as an std::optional
+         * @return std::optional<std::string> 
+         */
+        std::optional<std::string> get_focus_name() const {
+            if (focused == keys.end())
+                return std::nullopt;
+            return *focused;
+        }
+
+        /**
+         * Sets the name of the optional to \p name if some element is focused
+         * @param [out] name the name of the focused element
+         * @return true if focused element is present
+         * @return false if focused element is not present
+         */
+        bool get_focus_name(std::string &name) const {
+            if (focused == keys.end())
+                return false;
+            name = *focused;
+            return true;
+        }
+
+        /// Focuses the first element
+        void focus_front() {
+            if (table.empty()) {
+                focused = keys.end();
+                return;
+            }
+            focused = keys.begin();
+        }
+
+        /// Focuses the last element
+        void focus_back() {
+            if (table.empty()) {
+                focused = keys.end();
+                return;
+            }
+            focused = keys.end();
+            focused--;
+        }
+
+        /// Focuses the next element
+        void focus_next() {
+            if (table.empty()) {
+                focused = keys.end();
+                return;
+            }
+
+            if (focused == keys.end())
+                focused = keys.begin();
+            else {
+                focused++;
+                if (focused == keys.end())
+                    focused = keys.begin();
+            }
+        }
+
+        /// Focuses the previous element
+        void focus_prev() {
+            if (table.empty()) {
+                focused = keys.end();
+                return;
+            }
+
+            if (focused == keys.end())
+                focused = keys.begin();
+            else {
+                if (focused == keys.begin())
+                    focused = keys.end();
+                focused--;
+            }
+        }
+    };
 
     struct TextInfo {
         /// The text to display

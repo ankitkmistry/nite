@@ -665,6 +665,7 @@ void checkbox_test(State &state) {
 }
 
 void pane_align_test(State &state) {
+    static size_t align = 0;
     static ScrollState scroll_state;
 
     Event event;
@@ -673,6 +674,10 @@ void pane_align_test(State &state) {
         HandleEvent(event, [&] (const KeyEvent &ev) {
             if (ev.key_down && ev.modifiers == 0 && ev.key_code == KeyCode::K_Q)
                 CloseWindow(state);
+            if (ev.key_down && ev.modifiers == 0 && ev.key_code == KeyCode::LEFT)
+                align = align == 0 ? 8 : align - 1;
+            if (ev.key_down && ev.modifiers == 0 && ev.key_code == KeyCode::RIGHT)
+                align = align == 8 ? 0 : align + 1;
         });
     }
 
@@ -680,7 +685,7 @@ void pane_align_test(State &state) {
         Size min_size = GetPaneSize(state) / 2;
         Size max_size = GetPaneSize(state);
         BeginScrollPane(state, scroll_state, {
-            .pos = GetAlignedPos(state, min_size, Align::CENTER),
+            .pos = GetAlignedPos(state, min_size, static_cast<Align>(align)),
             .min_size = min_size,
             .max_size = max_size,
             .scroll_bar = SCROLL_LIGHT,
@@ -702,7 +707,7 @@ void pane_align_test(State &state) {
 
 // clang-format off
 
-int main() {
+int main3() {
     auto &state = GetState();
     Initialize(state);
 
@@ -712,6 +717,20 @@ int main() {
 
     Cleanup();
     return 0;
+}
+
+// clang-format on
+
+int main() {
+    FocusTable table{"abc", "bcd", "dca"};
+    table.focus_front();
+    for (;;) {
+        table.focus_prev();
+        if (std::string name; table.get_focus_name(name))
+            std::cout << "name: " << name << std::endl;
+        else
+            std::cout << "no focus" << std::endl;
+    }
 }
 
 // clang-format off

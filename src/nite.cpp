@@ -626,12 +626,12 @@ namespace nite
 
     Result Initialize(State &state) {
         if (!internal::console::is_tty())
-            return "cannot initialize in a non-terminal environment";
+            return Result::Error("cannot initialize in a non-terminal environment");
         if (const auto result = internal::console::init(); !result)
             return result;
 
         state.impl->set_closed(false);
-        return true;
+        return Result::Ok;
     }
 
     Result Cleanup() {
@@ -2349,22 +2349,22 @@ namespace nite::internal::console
 
         // Fill the entire screen with blanks.
         if (!GetConsoleScreenBufferInfo(h_con, &csbi))
-            return std::format("error getting console info: {}", get_last_error());
+            return Result::Error("error getting console info: {}", get_last_error());
         if (!FillConsoleOutputCharacter(h_con, ' ', csbi.dwSize.X * csbi.dwSize.Y, coord_screen, &chars_written))
-            return std::format("error writing to console: {}", get_last_error());
+            return Result::Error("error writing to console: {}", get_last_error());
 
         // Set the buffer attributes.
         if (!GetConsoleScreenBufferInfo(h_con, &csbi))
-            return std::format("error getting console info: {}", get_last_error());
+            return Result::Error("error getting console info: {}", get_last_error());
         if (!FillConsoleOutputAttribute(
                     h_con, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, csbi.dwSize.X * csbi.dwSize.Y, coord_screen, &chars_written
             ))
-            return std::format("error setting console color: {}", get_last_error());
+            return Result::Error("error setting console color: {}", get_last_error());
 
         // Put the cursor in the top left corner.
         if (!SetConsoleCursorPosition(h_con, coord_screen))
-            return std::format("error setting console position: {}", get_last_error());
-        return true;
+            return Result::Error("error setting console position: {}", get_last_error());
+        return Result::Ok;
     }
 
     Result size(size_t &width, size_t &height) {
@@ -2372,20 +2372,20 @@ namespace nite::internal::console
 
         CONSOLE_SCREEN_BUFFER_INFO info;
         if (!GetConsoleScreenBufferInfo(h_con, &info))
-            return std::format("error getting console size: {}", get_last_error());
+            return Result::Error("error getting console size: {}", get_last_error());
 
         const int columns = info.srWindow.Right - info.srWindow.Left + 1;
         const int rows = info.srWindow.Bottom - info.srWindow.Top + 1;
         width = columns > 0 ? columns : 0;
         height = rows > 0 ? rows : 0;
-        return true;
+        return Result::Ok;
     }
 
     Result print(const std::string &text) {
         static const HANDLE h_con = GetStdHandle(STD_OUTPUT_HANDLE);
         if (!WriteConsole(h_con, text.c_str(), text.size(), NULL, NULL))
-            return std::format("error printing to console: {}", get_last_error());
-        return true;
+            return Result::Error("error printing to console: {}", get_last_error());
+        return Result::Ok;
     }
 
     static DWORD old_in_mode = 0, old_out_mode = 0;
@@ -2397,18 +2397,18 @@ namespace nite::internal::console
         static const HANDLE h_conout = GetStdHandle(STD_OUTPUT_HANDLE);
 
         if (!GetConsoleMode(h_conout, &old_out_mode))
-            return std::format("error getting console out mode: {}", get_last_error());
+            return Result::Error("error getting console out mode: {}", get_last_error());
         if (!GetConsoleMode(h_conin, &old_in_mode))
-            return std::format("error getting console in mode: {}", get_last_error());
+            return Result::Error("error getting console in mode: {}", get_last_error());
         if ((old_console_cp = GetConsoleOutputCP()) == 0)
-            return std::format("error getting console code page: {}", get_last_error());
+            return Result::Error("error getting console code page: {}", get_last_error());
 
         DWORD out_mode = 0;
         out_mode |= ENABLE_PROCESSED_OUTPUT;
         out_mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
         out_mode |= DISABLE_NEWLINE_AUTO_RETURN;
         if (!SetConsoleMode(h_conout, out_mode))
-            return std::format("error setting console in mode: {}", get_last_error());
+            return Result::Error("error setting console in mode: {}", get_last_error());
 
         DWORD in_mode = 0;
         in_mode |= ENABLE_EXTENDED_FLAGS;
@@ -2416,22 +2416,22 @@ namespace nite::internal::console
         in_mode |= ENABLE_WINDOW_INPUT;
         in_mode &= ~ENABLE_QUICK_EDIT_MODE;
         if (!SetConsoleMode(h_conin, in_mode))
-            return std::format("error setting console out mode: {}", get_last_error());
+            return Result::Error("error setting console out mode: {}", get_last_error());
 
         if (!SetConsoleOutputCP(CP_UTF8))
-            return std::format("error setting console code page: {}", get_last_error());
+            return Result::Error("error setting console code page: {}", get_last_error());
 
         // Set locale to utf-8
         old_locale = std::setlocale(LC_CTYPE, NULL);
         if (std::setlocale(LC_CTYPE, NITE_DEFAULT_LOCALE) == NULL)
-            return std::format("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
+            return Result::Error("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
 
         $(print(CSI "?1049h"));    // Enter alternate buffer
         $(print(CSI "?25l"));      // Hide console cursor
         $(print(CSI "?30l"));      // Do not show scroll bar
 
         $(clear());
-        return true;
+        return Result::Ok;
     }
 
     Result restore() {
@@ -2443,15 +2443,15 @@ namespace nite::internal::console
 
         // Restore locale
         if (std::setlocale(LC_CTYPE, old_locale.c_str()) == NULL)
-            return std::format("error restoring locale to '{}'", old_locale);
+            return Result::Error("error restoring locale to '{}'", old_locale);
 
         if (!SetConsoleOutputCP(old_console_cp))
-            return std::format("error setting console code page: {}", get_last_error());
+            return Result::Error("error setting console code page: {}", get_last_error());
         if (!SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), old_in_mode))
-            return std::format("error setting console in mode: {}", get_last_error());
+            return Result::Error("error setting console in mode: {}", get_last_error());
         if (!SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), old_out_mode))
-            return std::format("error setting console out mode: {}", get_last_error());
-        return true;
+            return Result::Error("error setting console out mode: {}", get_last_error());
+        return Result::Ok;
     }
 }    // namespace nite::internal::console
 
