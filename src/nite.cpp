@@ -64,7 +64,7 @@ namespace nite
         return std::string(&buf[0], len);
 #else
         // Convert
-        const size_t len = wcrtomb(&buf[0], c, &state);
+        const size_t len = wcrtomb(&buf[0], wc, &state);
         if (len == static_cast<size_t>(-1))
             return "";
         return std::string(&buf[0], len);
@@ -1116,45 +1116,45 @@ namespace nite
     Position GetAlignedPos(State &state, const Size size, const Align align) {
         auto &current = state.impl->get_current_box();
 
-        size_t col_start;
-        size_t row_start;
+        size_t col_start = 0;
+        size_t row_start = 0;
 
         switch (align) {
         case Align::TOP_LEFT:
-            row_start = 0;
             col_start = 0;
+            row_start = 0;
             break;
         case Align::TOP:
-            row_start = 0;
             col_start = (current.get_size().width - size.width) / 2;
+            row_start = 0;
             break;
         case Align::TOP_RIGHT:
-            row_start = 0;
             col_start = current.get_size().width - size.width;
+            row_start = 0;
             break;
         case Align::LEFT:
-            row_start = (current.get_size().height - size.height) / 2;
             col_start = 0;
+            row_start = (current.get_size().height - size.height) / 2;
             break;
         case Align::CENTER:
-            row_start = (current.get_size().height - size.height) / 2;
             col_start = (current.get_size().width - size.width) / 2;
+            row_start = (current.get_size().height - size.height) / 2;
             break;
         case Align::RIGHT:
-            row_start = (current.get_size().height - size.height) / 2;
             col_start = current.get_size().width - size.width;
+            row_start = (current.get_size().height - size.height) / 2;
             break;
         case Align::BOTTOM_LEFT:
-            row_start = current.get_size().height - size.height;
             col_start = 0;
+            row_start = current.get_size().height - size.height;
             break;
         case Align::BOTTOM:
-            row_start = current.get_size().height - size.height;
             col_start = (current.get_size().width - size.width) / 2;
+            row_start = current.get_size().height - size.height;
             break;
         case Align::BOTTOM_RIGHT:
-            row_start = current.get_size().height - size.height;
             col_start = current.get_size().width - size.width;
+            row_start = current.get_size().height - size.height;
             break;
         }
         return current.get_pos() + Position{.col = col_start, .row = row_start};
@@ -3087,20 +3087,20 @@ namespace nite::internal::console
 
     Result clear() {
         if (erase() == ERR)
-            return false;
-        return true;
+            return Result::Error();
+        return Result::Ok;
     }
 
     Result size(size_t &width, size_t &height) {
         width = COLS;
         height = LINES;
-        return true;
+        return Result::Ok;
     }
 
     Result print(const std::string &text) {
         if (write(STDOUT_FILENO, text.data(), text.size()) == -1)
-            return std::format("error writing to the console: {}", get_last_error());
-        return true;
+            return Result::Error("error writing to the console: {}", get_last_error());
+        return Result::Ok;
     }
 
     static std::string old_locale;
@@ -3110,7 +3110,7 @@ namespace nite::internal::console
         // Set locale to utf-8
         old_locale = std::setlocale(LC_CTYPE, NULL);
         if (std::setlocale(LC_CTYPE, NITE_DEFAULT_LOCALE) == NULL)
-            return std::format("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
+            return Result::Error("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
 
         initscr();               // Start curses mode
         raw();                   // Make the terminal raw
@@ -3128,7 +3128,7 @@ namespace nite::internal::console
         mousemask(mmask, &old_mmask);
 
         refresh();
-        return true;
+        return Result::Ok;
     }
 
     Result restore() {
@@ -3136,8 +3136,8 @@ namespace nite::internal::console
 
         // Restore locale
         if (std::setlocale(LC_CTYPE, old_locale.c_str()) == NULL)
-            return std::format("error restoring locale to '{}'", old_locale);
-        return true;
+            return Result::Error("error restoring locale to '{}'", old_locale);
+        return Result::Ok;
     }
 }    // namespace nite::internal::console
 
@@ -3385,132 +3385,132 @@ namespace nite::internal
         switch (c) {
         case '\b':
             key_code = KeyCode::BACKSPACE;
-            return true;
+            return Result::Ok;
         case '\r':
         case '\n':
             key_code = KeyCode::ENTER;
-            return true;
+            return Result::Ok;
         case '\t':
             key_code = KeyCode::TAB;
-            return true;
+            return Result::Ok;
         case '\x7f':
             key_code = KeyCode::ESCAPE;
-            return true;
+            return Result::Ok;
         case '\x1b':
             key_code = KeyCode::ESCAPE;
-            return true;
+            return Result::Ok;
         case ' ':
             key_code = KeyCode::SPACE;
-            return true;
+            return Result::Ok;
         case '!':
             key_code = KeyCode::BANG;
-            return true;
+            return Result::Ok;
         case '@':
             key_code = KeyCode::AT;
-            return true;
+            return Result::Ok;
         case '#':
             key_code = KeyCode::HASH;
-            return true;
+            return Result::Ok;
         case '$':
             key_code = KeyCode::DOLLAR;
-            return true;
+            return Result::Ok;
         case '%':
             key_code = KeyCode::PERCENT;
-            return true;
+            return Result::Ok;
         case '^':
             key_code = KeyCode::CARET;
-            return true;
+            return Result::Ok;
         case '&':
             key_code = KeyCode::AMPERSAND;
-            return true;
+            return Result::Ok;
         case '*':
             key_code = KeyCode::ASTERISK;
-            return true;
+            return Result::Ok;
         case '(':
             key_code = KeyCode::LPAREN;
-            return true;
+            return Result::Ok;
         case ')':
             key_code = KeyCode::RPAREN;
-            return true;
+            return Result::Ok;
         case '_':
             key_code = KeyCode::UNDERSCORE;
-            return true;
+            return Result::Ok;
         case '+':
             key_code = KeyCode::PLUS;
-            return true;
+            return Result::Ok;
         case '-':
             key_code = KeyCode::MINUS;
-            return true;
+            return Result::Ok;
         case '=':
             key_code = KeyCode::EQUAL;
-            return true;
+            return Result::Ok;
         case '{':
             key_code = KeyCode::LBRACE;
-            return true;
+            return Result::Ok;
         case '}':
             key_code = KeyCode::RBRACE;
-            return true;
+            return Result::Ok;
         case '[':
             key_code = KeyCode::LBRACKET;
-            return true;
+            return Result::Ok;
         case ']':
             key_code = KeyCode::RBRACKET;
-            return true;
+            return Result::Ok;
         case '|':
             key_code = KeyCode::PIPE;
-            return true;
+            return Result::Ok;
         case '\\':
             key_code = KeyCode::BACKSLASH;
-            return true;
+            return Result::Ok;
         case ':':
             key_code = KeyCode::COLON;
-            return true;
+            return Result::Ok;
         case '"':
             key_code = KeyCode::DQUOTE;
-            return true;
+            return Result::Ok;
         case ';':
             key_code = KeyCode::SEMICOLON;
-            return true;
+            return Result::Ok;
         case '\'':
             key_code = KeyCode::SQUOTE;
-            return true;
+            return Result::Ok;
         case '<':
             key_code = KeyCode::LESS;
-            return true;
+            return Result::Ok;
         case '>':
             key_code = KeyCode::GREATER;
-            return true;
+            return Result::Ok;
         case '?':
             key_code = KeyCode::HOOK;
-            return true;
+            return Result::Ok;
         case ',':
             key_code = KeyCode::COMMA;
-            return true;
+            return Result::Ok;
         case '.':
             key_code = KeyCode::PERIOD;
-            return true;
+            return Result::Ok;
         case '/':
             key_code = KeyCode::SLASH;
-            return true;
+            return Result::Ok;
         case '`':
             key_code = KeyCode::BQUOTE;
-            return true;
+            return Result::Ok;
         case '~':
             key_code = KeyCode::TILDE;
-            return true;
+            return Result::Ok;
         default:
             if ('a' <= c && c <= 'z') {
                 key_code = static_cast<KeyCode>(c - 'a' + static_cast<int>(KeyCode::K_A));
-                return true;
+                return Result::Ok;
             } else if ('A' <= c && c <= 'Z') {
                 key_code = static_cast<KeyCode>(c - 'A' + static_cast<int>(KeyCode::K_A));
-                return true;
+                return Result::Ok;
             } else if ('0' <= c && c <= '9') {
                 key_code = static_cast<KeyCode>(c - '0' + static_cast<int>(KeyCode::K_0));
-                return true;
+                return Result::Ok;
             }
         }
-        return std::format("key not supported: 0x{:x}", c);
+        return Result::Error("key not supported: 0x{:x}", c);
     }
 }    // namespace nite::internal
 
@@ -3536,22 +3536,22 @@ namespace nite::internal::console
 
     Result clear() {
         $(print(CSI "2J"));
-        return true;
+        return Result::Ok;
     }
 
     Result size(size_t &width, size_t &height) {
         struct winsize w;
         if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == -1)
-            return std::format("error getting console size: {}", get_last_error());
+            return Result::Error("error getting console size: {}", get_last_error());
         width = w.ws_col;
         height = w.ws_row;
-        return true;
+        return Result::Ok;
     }
 
     Result print(const std::string &text) {
         if (write(STDOUT_FILENO, text.data(), text.size()) == -1)
-            return std::format("error writing to the console: {}", get_last_error());
-        return true;
+            return Result::Error("error writing to the console: {}", get_last_error());
+        return Result::Ok;
     }
 
     static struct termios old_term, new_term;
@@ -3560,7 +3560,7 @@ namespace nite::internal::console
     Result init() {
         // Refer to: man 3 termios
         if (tcgetattr(STDIN_FILENO, &old_term) == -1)
-            return std::format("error getting terminal attributes: {}", get_last_error());
+            return Result::Error("error getting terminal attributes: {}", get_last_error());
 
         new_term = old_term;
         cfmakeraw(&new_term);    // enable raw mode
@@ -3573,12 +3573,12 @@ namespace nite::internal::console
         new_term.c_cc[VMIN] = 0;     // enable polling read
         new_term.c_cc[VTIME] = 0;    // enable polling read
         if (tcsetattr(STDIN_FILENO, TCSANOW, &new_term) == -1)
-            return std::format("error setting terminal attributes: {}", get_last_error());
+            return Result::Error("error setting terminal attributes: {}", get_last_error());
 
         // Set locale to utf-8
         old_locale = std::setlocale(LC_CTYPE, NULL);
         if (std::setlocale(LC_CTYPE, NITE_DEFAULT_LOCALE) == NULL)
-            return std::format("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
+            return Result::Error("error setting locale to '{}'", NITE_DEFAULT_LOCALE);
 
         $(print(CSI "?1049h"));    // Enter alternate buffer
         $(print(CSI "?25l"));      // Hide console cursor
@@ -3602,7 +3602,7 @@ namespace nite::internal::console
         // Other specific
         $(print(CSI "?1004h"));    // Send FocusIn/FocusOut events
         $(print(CSI "?30l"));      // Do not show scroll bar
-        return true;
+        return Result::Ok;
     }
 
     Result restore() {
@@ -3624,11 +3624,11 @@ namespace nite::internal::console
 
         // Restore locale
         if (std::setlocale(LC_CTYPE, old_locale.c_str()) == NULL)
-            return std::format("error restoring locale to '{}'", old_locale);
+            return Result::Error("error restoring locale to '{}'", old_locale);
         // Restore old terminal modes
         if (tcsetattr(STDIN_FILENO, TCSANOW, &old_term) == -1)
-            return std::format("error setting terminal attributes: {}", get_last_error());
-        return true;
+            return Result::Error("error setting terminal attributes: {}", get_last_error());
+        return Result::Ok;
     }
 }    // namespace nite::internal::console
 
@@ -3703,7 +3703,7 @@ namespace nite::internal
             $(expect(';'));
             $(expect_number(y_coord));
             if (!match_any('M', 'm'))
-                return "expected 'm' or 'M'";
+                return Result::Error("expected 'm' or 'M'");
 
             // Bit layout of `control_byte`
             // 0x * * * * * * * *
@@ -3747,16 +3747,16 @@ namespace nite::internal
                 break;
             case 6:
                 if (dragging)
-                    return false;
+                    return Result::Error();
                 kind = MouseEventKind::SCROLL_LEFT;
                 break;
             case 7:
                 if (dragging)
-                    return false;
+                    return Result::Error();
                 kind = MouseEventKind::SCROLL_RIGHT;
                 break;
             default:
-                return false;
+                return Result::Error();
             }
 
             if (kind == MouseEventKind::CLICK) {
@@ -3787,7 +3787,7 @@ namespace nite::internal
                     .pos = {.col = x_coord - 1, .row = y_coord - 1},
                     .modifiers = modifiers,
             };
-            return true;
+            return Result::Ok;
         }
 
         // CSI NUMBER (':' NUMBER? (':' NUMBER?)?)? (';' NUMBER?)? [ABCDEFHPQSu~]
@@ -3804,7 +3804,7 @@ namespace nite::internal
                         .key_char = current(),
                         .modifiers = 0,
                 };
-                return true;
+                return Result::Ok;
             case 0x7f:
             case 0x08:    // Backspace key
                 event = KeyEvent{
@@ -3813,7 +3813,7 @@ namespace nite::internal
                         .key_char = current(),
                         .modifiers = 0,
                 };
-                return true;
+                return Result::Ok;
             case 0x09:    // Tab key
                 event = KeyEvent{
                         .key_down = true,
@@ -3821,16 +3821,16 @@ namespace nite::internal
                         .key_char = current(),
                         .modifiers = 0,
                 };
-                return true;
+                return Result::Ok;
             case *ESC: {
                 $(expect('['));    // Now we are past the CSI
 
                 if (match('O')) {
                     event = FocusEvent{.focus_gained = false};
-                    return true;
+                    return Result::Ok;
                 } else if (match('I')) {
                     event = FocusEvent{.focus_gained = true};
-                    return true;
+                    return Result::Ok;
                 }
 
                 int key_val_unsh = 0;              // unshifted key val
@@ -3857,7 +3857,7 @@ namespace nite::internal
                 if (match_any('A', 'B', 'C', 'D', 'E', 'F', 'H', 'P', 'Q', 'S', 'u', '~'))
                     functional = current();
                 else
-                    return "expected one of 'ABCDEFHPQSu~'";
+                    return Result::Error("expected one of 'ABCDEFHPQSu~'");
 
                 KeyEvent kev;
 
@@ -3895,7 +3895,7 @@ namespace nite::internal
                             kev.key_code = KeyCode::F4;
                             break;
                         default:
-                            return "key not supported";
+                            return Result::Error("key not supported");
                         }
                     } else if (functional == '~') {
                         switch (key_val_unsh) {
@@ -3990,7 +3990,7 @@ namespace nite::internal
                             kev.key_code = KeyCode::F20;
                             break;
                         default:
-                            return "key not supported";
+                            return Result::Error("key not supported");
                         }
                     } else if (functional == 'u') {
                         switch (key_val_unsh) {
@@ -4098,7 +4098,7 @@ namespace nite::internal
                 }
 
                 event = kev;
-                return true;
+                return Result::Ok;
             }
             default: {
                 KeyCode key_code;
@@ -4109,7 +4109,7 @@ namespace nite::internal
                         .key_char = current(),
                         .modifiers = 0,
                 };
-                return true;
+                return Result::Ok;
             }
             }
         }
@@ -4136,7 +4136,7 @@ namespace nite::internal
                     key_code = KeyCode::F4;
                     break;
                 default:
-                    return "key not supported";
+                    return Result::Error("key not supported");
                 }
                 event = KeyEvent{
                         .key_down = true,
@@ -4144,7 +4144,7 @@ namespace nite::internal
                         .key_char = 0,
                         .modifiers = 0,
                 };
-                return true;
+                return Result::Ok;
             } else if (match('[')) {
                 KeyCode key_code;
                 switch (advance()) {
@@ -4167,7 +4167,7 @@ namespace nite::internal
                     key_code = KeyCode::END;
                     break;
                 default:
-                    return "key not supported";
+                    return Result::Error("key not supported");
                 }
                 event = KeyEvent{
                         .key_down = true,
@@ -4175,10 +4175,10 @@ namespace nite::internal
                         .key_char = 0,
                         .modifiers = 0,
                 };
-                return true;
+                return Result::Ok;
             }
 
-            return "key not supported";
+            return Result::Error("key not supported");
         }
 
         bool parse(Event &event) {
@@ -4202,7 +4202,7 @@ namespace nite::internal
                 return true;
 
             index = old_index;
-            if (const auto result = parse_key_leegacy(event))
+            if (const auto result = parse_key_legacy(event))
                 return true;
             return false;
         }
@@ -4211,9 +4211,9 @@ namespace nite::internal
             if (peek() == *ESC && peek(1) == '[') {
                 advance();
                 advance();
-                return true;
+                return Result::Ok;
             } else
-                return "expected CSI sequence";
+                return Result::Error("expected CSI sequence");
         }
 
         bool match_digit() {
@@ -4241,8 +4241,8 @@ namespace nite::internal
         template<std::integral Integer>
         Result expect_number(Integer &number) {
             if (match_number(number))
-                return true;
-            return "expected number";
+                return Result::Ok;
+            return Result::Error("expected number");
         }
 
         template<typename... Char>
@@ -4267,9 +4267,9 @@ namespace nite::internal
         Result expect(char c) {
             if (peek() == c) {
                 advance();
-                return true;
+                return Result::Ok;
             }
-            return std::format("expected '{}' found '{}'", c, peek());
+            return Result::Error("expected '{}' found '{}'", c, peek());
         }
 
         char current() const {
@@ -4308,7 +4308,7 @@ namespace nite::internal
     bool PollRawEvent(Event &event) {
         static std::queue<Event> pending_events = []() {
             // See: man 2 sigaction
-            static struct sigaction sa{};
+            static struct sigaction sa {};
             sa.sa_flags = 0;
             sigemptyset(&sa.sa_mask);
             sa.sa_handler = [](int) { pending_events.push(ResizeEvent{GetWindowSize()}); };
@@ -4345,119 +4345,119 @@ namespace nite::internal
         switch (c) {
         case '\033':
             key_code = KeyCode::ESCAPE;
-            return true;
+            return Result::Ok;
         case ' ':
             key_code = KeyCode::SPACE;
-            return true;
+            return Result::Ok;
         case '!':
             key_code = KeyCode::BANG;
-            return true;
+            return Result::Ok;
         case '@':
             key_code = KeyCode::AT;
-            return true;
+            return Result::Ok;
         case '#':
             key_code = KeyCode::HASH;
-            return true;
+            return Result::Ok;
         case '$':
             key_code = KeyCode::DOLLAR;
-            return true;
+            return Result::Ok;
         case '%':
             key_code = KeyCode::PERCENT;
-            return true;
+            return Result::Ok;
         case '^':
             key_code = KeyCode::CARET;
-            return true;
+            return Result::Ok;
         case '&':
             key_code = KeyCode::AMPERSAND;
-            return true;
+            return Result::Ok;
         case '*':
             key_code = KeyCode::ASTERISK;
-            return true;
+            return Result::Ok;
         case '(':
             key_code = KeyCode::LPAREN;
-            return true;
+            return Result::Ok;
         case ')':
             key_code = KeyCode::RPAREN;
-            return true;
+            return Result::Ok;
         case '_':
             key_code = KeyCode::UNDERSCORE;
-            return true;
+            return Result::Ok;
         case '+':
             key_code = KeyCode::PLUS;
-            return true;
+            return Result::Ok;
         case '-':
             key_code = KeyCode::MINUS;
-            return true;
+            return Result::Ok;
         case '=':
             key_code = KeyCode::EQUAL;
-            return true;
+            return Result::Ok;
         case '{':
             key_code = KeyCode::LBRACE;
-            return true;
+            return Result::Ok;
         case '}':
             key_code = KeyCode::RBRACE;
-            return true;
+            return Result::Ok;
         case '[':
             key_code = KeyCode::LBRACKET;
-            return true;
+            return Result::Ok;
         case ']':
             key_code = KeyCode::RBRACKET;
-            return true;
+            return Result::Ok;
         case '|':
             key_code = KeyCode::PIPE;
-            return true;
+            return Result::Ok;
         case '\\':
             key_code = KeyCode::BACKSLASH;
-            return true;
+            return Result::Ok;
         case ':':
             key_code = KeyCode::COLON;
-            return true;
+            return Result::Ok;
         case '"':
             key_code = KeyCode::DQUOTE;
-            return true;
+            return Result::Ok;
         case ';':
             key_code = KeyCode::SEMICOLON;
-            return true;
+            return Result::Ok;
         case '\'':
             key_code = KeyCode::SQUOTE;
-            return true;
+            return Result::Ok;
         case '<':
             key_code = KeyCode::LESS;
-            return true;
+            return Result::Ok;
         case '>':
             key_code = KeyCode::GREATER;
-            return true;
+            return Result::Ok;
         case '?':
             key_code = KeyCode::HOOK;
-            return true;
+            return Result::Ok;
         case ',':
             key_code = KeyCode::COMMA;
-            return true;
+            return Result::Ok;
         case '.':
             key_code = KeyCode::PERIOD;
-            return true;
+            return Result::Ok;
         case '/':
             key_code = KeyCode::SLASH;
-            return true;
+            return Result::Ok;
         case '`':
             key_code = KeyCode::BQUOTE;
-            return true;
+            return Result::Ok;
         case '~':
             key_code = KeyCode::TILDE;
-            return true;
+            return Result::Ok;
         default:
             if ('a' <= c && c <= 'z') {
                 key_code = static_cast<KeyCode>(c - 'a' + static_cast<int>(KeyCode::K_A));
-                return true;
+                return Result::Ok;
             } else if ('A' <= c && c <= 'Z') {
                 key_code = static_cast<KeyCode>(c - 'A' + static_cast<int>(KeyCode::K_A));
-                return true;
+                return Result::Ok;
             } else if ('0' <= c && c <= '9') {
                 key_code = static_cast<KeyCode>(c - '0' + static_cast<int>(KeyCode::K_0));
-                return true;
+                return Result::Ok;
             }
         }
-        return std::format("key not supported: 0x{:x}", c);
+        return Result::Error("key not supported: 0x{:x}", c);
     }
 }    // namespace nite::internal
 

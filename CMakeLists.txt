@@ -42,6 +42,8 @@ if (NITE_USE_NCURSES)
     if (DEFINED CURSES_INCLUDE_DIRS)
         target_include_directories (nite PRIVATE ${CURSES_INCLUDE_DIRS})
     endif ()
+
+    target_compile_definitions(nite PRIVATE NITE_USE_NCURSES)
 endif ()
 
 # Add tests and install targets if needed.

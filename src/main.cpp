@@ -707,7 +707,7 @@ void pane_align_test(State &state) {
 
 // clang-format off
 
-int main3() {
+int main() {
     auto &state = GetState();
     Initialize(state);
 
@@ -721,7 +721,7 @@ int main3() {
 
 // clang-format on
 
-int main() {
+int main3() {
     FocusTable table{"abc", "bcd", "dca"};
     table.focus_front();
     for (;;) {

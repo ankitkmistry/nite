@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <memory>
+#include <list>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -46,6 +47,10 @@ namespace nite
         template<typename... Args>
         static Result Error(std::format_string<Args...> msg, Args... args) {
             return Result(std::format<Args...>(msg, std::forward<Args>(args)...));
+        }
+
+        static Result Error() {
+            return Result(false);
         }
 
         Result() = delete;
