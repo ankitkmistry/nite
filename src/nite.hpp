@@ -1441,7 +1441,7 @@ namespace nite
     /**
      * Fill the background of all cells of the selected pane
      * @param [inout] state the console state to work on
-     * @param color the background color
+     * @param [in] color the background color
      */
     void FillBackground(State &state, const Color color);
     /**
@@ -1566,8 +1566,8 @@ namespace nite
      * \note Position values used before the corresponding EndPane call 
      * are always relative to the top_left position of this Pane
      * 
-     * @param state the console state to work on
-     * @param info the grid pane info
+     * @param [inout] state the console state to work on
+     * @param [in] info the grid pane info
      */
     void BeginGridPane(State &state, GridPaneInfo info);
     /**
@@ -1630,18 +1630,18 @@ namespace nite
 
     /**
      * Draws a horizontal divider at the specified row.
-     * @param state the console state to work on
-     * @param row the specified row position
-     * @param fill the fill char of the divider
-     * @param style the style of the divider
+     * @param [inout] state the console state to work on
+     * @param [in] row the specified row position
+     * @param [in] fill the fill char of the divider
+     * @param [in] style the style of the divider
      */
     void DrawHDivider(State &state, size_t row, wchar_t fill = L'─', Style style = {});
     /**
      * Draws a vertical divider at the specified col.
-     * @param state the console state to work on
-     * @param col the specified col position
-     * @param fill the fill char of the divider
-     * @param style the style of the divider
+     * @param [inout] state the console state to work on
+     * @param [in] col the specified col position
+     * @param [in] fill the fill char of the divider
+     * @param [in] style the style of the divider
      */
     void DrawVDivider(State &state, size_t col, wchar_t fill = L'│', Style style = {});
 
