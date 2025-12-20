@@ -773,22 +773,6 @@ int main() {
     return 0;
 }
 
-// clang-format on
-
-int main3() {
-    FocusTable table{"abc", "bcd", "dca"};
-    table.focus_front();
-    for (;;) {
-        table.focus_prev();
-        if (std::string name; table.get_focus_name(name))
-            std::cout << "name: " << name << std::endl;
-        else
-            std::cout << "no focus" << std::endl;
-    }
-}
-
-// clang-format off
-
 int main2() {
     auto &state = GetState();
     if (const auto result = Initialize(state); !result) {
