@@ -11,7 +11,7 @@ project (nite
 
 # Set C++ standard to C++20.
 set (CMAKE_CXX_STANDARD 20)
-set (CMAKE_CXX_STANDARD_REQUIRED True)
+set (CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Target: nite
 add_library (nite STATIC src/nite.cpp)
