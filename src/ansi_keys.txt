@@ -80,5 +80,3 @@ KP_ADD               | 57413 u
 KP_ENTER             | 57414 u
 KP_EQUAL             | 57415 u
 KP_SEPARATOR         | 57416 u
-
-
