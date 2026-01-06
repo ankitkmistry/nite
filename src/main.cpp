@@ -741,8 +741,72 @@ int main() {
     auto &state = GetState();
     Initialize(state);
 
+    Position pivot;
+
     while (!ShouldWindowClose(state)) {
-        grid_test(state);
+        Event event;
+        while (PollEvent(state, event)) {
+            HandleEvent(event, 
+                [&](const KeyEvent &ev) {
+                    if (ev.key_down)
+                        if (ev.key_code == KeyCode::ESCAPE && ev.modifiers == 0)
+                            CloseWindow(state);
+                }
+            );
+        }
+
+        BeginDrawing(state);
+        BeginScrollPane(state, pivot, {
+            .min_size = GetBufferSize(state) / 2,
+            .max_size = GetBufferSize(state),
+        });
+        BeginGridPane(state, {
+            .pos = {},
+            .size = GetBufferSize(state),
+            .col_sizes = {50, 50},
+            .row_sizes = {50, 50},
+        });
+
+        BeginGridCell(state, 0, 0); {
+            Text(state, {"Hello from 0, 0"});
+            Text(state, {
+                .text = "+ Col",
+                .pos = {.col = 0, .row = 1},
+            });
+            Text(state, {
+                .text = "- Col",
+                .pos = {.col = 6, .row = 1},
+            });
+            Text(state, {
+                .text = "+ Row",
+                .pos = {.col = 0, .row = 2},
+            });
+            Text(state, {
+                .text = "- Row",
+                .pos = {.col = 6, .row = 2},
+            });
+            FillBackground(state, COLOR_WHITE);
+            FillForeground(state, COLOR_BLACK);
+        } EndPane(state);
+
+        BeginGridCell(state, 0, 1); {
+            Text(state, {"Hello from 0, 1"});
+            FillBackground(state, COLOR_RED);
+        } EndPane(state);
+
+        BeginGridCell(state, 1, 1); {
+            Text(state, {"Hello from 1, 1"});
+            FillBackground(state, COLOR_BLUE);
+        } EndPane(state);
+
+        BeginGridCell(state, 1, 0); {
+            Text(state, {"Hello from 1, 0"});
+            FillBackground(state, COLOR_GREEN);
+        } EndPane(state);
+
+        EndPane(state);
+        EndPane(state);
+        EndDrawing(state);
     }
 
     Cleanup();

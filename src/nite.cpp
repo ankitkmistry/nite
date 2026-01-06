@@ -404,9 +404,12 @@ namespace nite
             }
 
             bool transform(size_t &col, size_t &row) const override {
-                col += pos.col;
-                row += pos.row;
-                return true;
+                if (col < size.width && row < size.height) {
+                    col += pos.col;
+                    row += pos.row;
+                    return true;
+                }
+                return false;
             }
         };
 
@@ -416,14 +419,14 @@ namespace nite
             bool vscroll_bar;
             ScrollBar scroll_style;
             Position pos;
-            Position pivot;
+            Position *pivot;
             Size min_size;
             Size max_size;
 
           public:
             ScrollBox(
                     bool show_scroll_home, bool show_hscroll_bar, bool show_vscroll_bar, const ScrollBar &scroll_style, const Position pos,
-                    const Position pivot, const Size min_size, const Size max_size
+                    Position *pivot, const Size min_size, const Size max_size
             )
                 : scroll_home(show_scroll_home),
                   hscroll_bar(show_hscroll_bar),
@@ -453,8 +456,8 @@ namespace nite
                 return scroll_style;
             }
 
-            Position get_pivot() const {
-                return pivot;
+            Position &get_pivot() const {
+                return *pivot;
             }
 
             Size get_min_size() const {
@@ -474,15 +477,15 @@ namespace nite
             }
 
             void set_size(const Size &s) override {
-                min_size = s;
+                max_size = s;
             }
 
             Size get_size() const override {
-                return min_size;
+                return max_size;
             }
 
             bool contains(const size_t col, const size_t row) const override {
-                return pos.col <= col && col < pos.col + min_size.width && pos.row <= row && row < pos.row + min_size.height;
+                return pos.col <= col && col < pos.col + max_size.width && pos.row <= row && row < pos.row + max_size.height;
             }
 
             bool contains(const Position pos) const override {
@@ -490,9 +493,9 @@ namespace nite
             }
 
             bool transform(size_t &col, size_t &row) const override {
-                if (pivot.col <= col && col < pivot.col + min_size.width && pivot.row <= row && row < pivot.row + min_size.height) {
-                    col = col + pos.col - pivot.col;
-                    row = row + pos.row - pivot.row;
+                if (pivot->col <= col && col < pivot->col + min_size.width && pivot->row <= row && row < pivot->row + min_size.height) {
+                    col = col + pos.col - pivot->col;
+                    row = row + pos.row - pivot->row;
                     return true;
                 }
                 return false;
@@ -549,9 +552,12 @@ namespace nite
             }
 
             bool transform(size_t &col, size_t &row) const override {
-                col += pos.col;
-                row += pos.row;
-                return true;
+                if (col < size.width && row < size.height) {
+                    col += pos.col;
+                    row += pos.row;
+                    return true;
+                }
+                return false;
             }
         };
     }    // namespace internal
@@ -662,12 +668,34 @@ namespace nite
             delta_time = time;
         }
 
+        // std::optional<Position> allowable(size_t col, size_t row) {
+        //     size_t saved_col = col;
+        //     size_t saved_row = row;
+        //
+        //     for (auto it = box_stack.rbegin(); it != box_stack.rend(); ++it) {
+        //         internal::Box *box = &**it;
+        //         if (it != box_stack.rbegin()) {
+        //             col -= box->get_pos().col;
+        //             row -= box->get_pos().row;
+        //         }
+        //         if (!box->transform(col, row))
+        //             return std::nullopt;
+        //     }
+        //
+        //     get_current_box().transform(saved_col, saved_row);
+        //     return Position{.col = saved_col, .row = saved_row};
+        // }
+
         bool set_cell(size_t col, size_t row, wchar_t value, const Style style) {
             internal::Box &box = get_current_box();
             if (!box.transform(col, row))
                 return false;
-            if (!box.contains(col, row))
-                return false;
+
+            // if (const auto pos = allowable(col, row)) {
+            //     col = pos->col;
+            //     row = pos->row;
+            // } else
+            //     return false;
 
             internal::CellBuffer &buffer = swapchain.back();
             if (!buffer.contains(col, row))
@@ -679,7 +707,6 @@ namespace nite
                 cell.style.fg = style.fg;
             if ((style.mode & STYLE_NO_BG) == 0)
                 cell.style.bg = style.bg;
-            // cell.style.mode = cell.style.mode;
             cell.style.mode = style.mode & ~(STYLE_NO_FG | STYLE_NO_BG);
             return true;
         }
@@ -963,20 +990,17 @@ namespace nite
         if (value == 0)
             return;
         if (info.on_vscroll) {
-            const intmax_t abs_value = std::abs(value);
-            for (intmax_t i = 0; i < abs_value; i++)
+            const int64_t abs_value = std::abs(value);
+            for (int64_t i = 0; i < abs_value; i++)
                 info.on_vscroll(std::ref(info));
         }
         if (value > 0) {
-            pivot.row += value;
+            pivot.col = saturated_add(pivot.col, static_cast<size_t>(value));
         } else if (value < 0) {
-            if (static_cast<size_t>(-value) <= pivot.row)
-                pivot.row += value;
-            else
-                pivot.row = 0;
+            pivot.col = saturated_sub(pivot.col, static_cast<size_t>(-value));
         }
-        if (pivot.row >= info.max_size.height - info.min_size.height)
-            pivot.row = info.max_size.height - info.min_size.height - 1;
+        if (pivot.row > info.max_size.height - info.min_size.height)
+            pivot.row = info.max_size.height - info.min_size.height;
     }
 
     static void scroll_horizontal(Position &pivot, ScrollPaneInfo &info, int64_t value) {
@@ -987,84 +1011,91 @@ namespace nite
         if (value == 0)
             return;
         if (info.on_hscroll) {
-            const intmax_t abs_value = std::abs(value);
-            for (intmax_t i = 0; i < abs_value; i++)
+            const int64_t abs_value = std::abs(value);
+            for (int64_t i = 0; i < abs_value; i++)
                 info.on_hscroll(std::ref(info));
         }
         if (value > 0) {
-            pivot.col += value;
+            pivot.col = saturated_add(pivot.col, static_cast<size_t>(value));
         } else if (value < 0) {
-            if (static_cast<size_t>(-value) <= pivot.col)
-                pivot.col += value;
-            else
-                pivot.col = 0;
+            pivot.col = saturated_sub(pivot.col, static_cast<size_t>(-value));
         }
-        if (pivot.col >= info.max_size.width - info.min_size.width)
-            pivot.col = info.max_size.width - info.min_size.width - 1;
+        if (pivot.col > info.max_size.width - info.min_size.width)
+            pivot.col = info.max_size.width - info.min_size.width;
     }
 
     void BeginScrollPane(State &state, Position &pivot, ScrollPaneInfo info) {
+        // FIXME: fix the scroll pane
         if (const auto no_box = dynamic_cast<internal::NoBox *>(&state.impl->get_current_box()); no_box) {
             state.impl->emplace_box<internal::NoBox>(*no_box);
             return;
         }
 
-        const auto left_scroll_btn = Position{.col = 0, .row = info.min_size.height - 1} + info.pos;
-        const auto right_scroll_btn = Position{.col = info.min_size.width - 2, .row = info.min_size.height - 1} + info.pos;
-        const auto top_scroll_btn = Position{.col = info.min_size.width - 1, .row = 0} + info.pos;
-        const auto bottom_scroll_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 2} + info.pos;
-        const auto home_cell_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 1} + info.pos;
+        state.impl->emplace_box<internal::ScrollBox>(
+                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, GetPanePosition(state) + info.pos, &pivot,
+                info.min_size, info.max_size
+        );
+
+        const bool is_hscroll_visible = info.show_hscroll_bar && info.max_size.width > info.min_size.width;
+        const bool is_vscroll_visible = info.show_vscroll_bar && info.max_size.height > info.min_size.height;
+        const bool is_home_visible = info.show_scroll_home && (is_hscroll_visible || is_vscroll_visible);
+
+        const auto left_scroll_btn = Position{.col = 0, .row = info.min_size.height - 1};
+        const auto right_scroll_btn = Position{.col = info.min_size.width - 2, .row = info.min_size.height - 1};
+        const auto top_scroll_btn = Position{.col = info.min_size.width - 1, .row = 0};
+        const auto bottom_scroll_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 2};
+        const auto home_cell_btn = Position{.col = info.min_size.width - 1, .row = info.min_size.height - 1};
 
         int64_t vscroll_count = 0;
         int64_t hscroll_count = 0;
 
         for (const Event &event: state.impl->events) {
             HandleEvent(event, [&](const MouseEvent &ev) {
+                if (!internal::StaticBox(GetPanePosition(state), info.min_size).contains(ev.pos))
+                    return;    // Do not take out of range events
+
                 switch (ev.kind) {
                 case MouseEventKind::CLICK:
                 case MouseEventKind::DOUBLE_CLICK:
                     if (ev.button != MouseButton::LEFT)
                         break;
-                    if (ev.pos - GetPanePosition(state) == left_scroll_btn)
+                    if (is_hscroll_visible && ev.pos - GetPanePosition(state) == left_scroll_btn + info.pos)
                         hscroll_count--;
-                    if (ev.pos - GetPanePosition(state) == right_scroll_btn)
+                    if (is_hscroll_visible && ev.pos - GetPanePosition(state) == right_scroll_btn + info.pos)
                         hscroll_count++;
-                    if (ev.pos - GetPanePosition(state) == top_scroll_btn)
+                    if (is_vscroll_visible && ev.pos - GetPanePosition(state) == top_scroll_btn + info.pos)
                         vscroll_count--;
-                    if (ev.pos - GetPanePosition(state) == bottom_scroll_btn)
+                    if (is_vscroll_visible && ev.pos - GetPanePosition(state) == bottom_scroll_btn + info.pos)
                         vscroll_count++;
-                    if (ev.pos - GetPanePosition(state) == home_cell_btn)
+                    if (is_home_visible && ev.pos - GetPanePosition(state) == home_cell_btn + info.pos)
                         pivot = {};
                     break;
                 case MouseEventKind::SCROLL_DOWN:
-                    if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
+                    if (is_vscroll_visible)
                         vscroll_count++;
                     break;
                 case MouseEventKind::SCROLL_UP:
-                    if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
+                    if (is_vscroll_visible)
                         vscroll_count--;
                     break;
                 case MouseEventKind::SCROLL_LEFT:
-                    if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
+                    if (is_hscroll_visible)
                         hscroll_count--;
                     break;
                 case MouseEventKind::SCROLL_RIGHT:
-                    if (internal::StaticBox(GetPanePosition(state) + info.pos, info.min_size).contains(ev.pos))
+                    if (is_hscroll_visible)
                         hscroll_count++;
                     break;
-                case MouseEventKind::MOVED:
+                default:
                     break;
                 }
             });
         }
 
-        scroll_horizontal(pivot, info, hscroll_count);
-        scroll_vertical(pivot, info, vscroll_count);
-
-        state.impl->emplace_box<internal::ScrollBox>(
-                info.show_scroll_home, info.show_hscroll_bar, info.show_vscroll_bar, info.scroll_bar, GetPanePosition(state) + info.pos, pivot,
-                info.min_size, info.max_size
-        );
+        if (is_hscroll_visible)
+            scroll_horizontal(pivot, info, hscroll_count);
+        if (is_vscroll_visible)
+            scroll_vertical(pivot, info, vscroll_count);
     }
 
     void BeginGridPane(State &state, GridPaneInfo info) {
@@ -1126,13 +1157,17 @@ namespace nite
             const auto min_size = scroll_box->get_min_size();
             const auto pivot = scroll_box->get_pivot();
 
+            const bool is_hscroll_visible = scroll_box->show_hscroll_bar() && max_size.width > min_size.width;
+            const bool is_vscroll_visible = scroll_box->show_vscroll_bar() && max_size.height > min_size.height;
+            const bool is_home_visible = scroll_box->show_scroll_home() && (is_hscroll_visible || is_vscroll_visible);
+
             // Scroll home button
-            if (scroll_box->show_scroll_home()) {
+            if (is_home_visible) {
                 const auto home_cell = Position{.col = min_size.width - 1, .row = min_size.height - 1} + pivot;
                 SetCell(state, scroll.home.value, home_cell, scroll.home.style);
             }
             // Vertical scroll
-            if (scroll_box->show_vscroll_bar() && min_size.height < max_size.height) {
+            if (is_vscroll_visible) {
                 const auto vscroll_start = Position{.col = min_size.width - 1, .row = 1} + pivot;
                 const auto vscroll_end = Position{.col = min_size.width - 1, .row = min_size.height - 2} + pivot;
                 DrawLine(state, vscroll_start, vscroll_end, scroll.v_bar.value, scroll.v_bar.style);
@@ -1149,7 +1184,7 @@ namespace nite
                 DrawLine(state, node_start, {.col = node_start.col, .row = node_start.row + node_height}, scroll.v_node.value, scroll.v_node.style);
             }
             // Horizontal scroll
-            if (scroll_box->show_hscroll_bar() && min_size.width < max_size.width) {
+            if (is_hscroll_visible) {
                 const auto hscroll_start = Position{.col = 1, .row = min_size.height - 1} + pivot;
                 const auto hscroll_end = Position{.col = min_size.width - 2, .row = min_size.height - 1} + pivot;
                 DrawLine(state, hscroll_start, hscroll_end, scroll.h_bar.value, scroll.h_bar.style);
