@@ -701,7 +701,55 @@ void pane_align_test(State &state) {
 
 // clang-format off
 
+void text_field_test(State &state) {
+    static std::string text;
+    static TextInputState text_state;
+
+    Event event;
+    while (PollEvent(state, event)) {
+        HandleEvent(event, [&] (const KeyEvent &ev) {
+            if (!ev.key_down) return;
+            if (ev.modifiers == 0 && ev.key_code == KeyCode::F4)
+                CloseWindow(state);
+        });
+    }
+
+    BeginDrawing(state);
+
+    FillBackground(state, COLOR_LIME);
+    TextField(state, text_state, {
+        .pos = {.col = 0, .row = 0},
+        .width = 20,
+        .on_enter = [&] (TextFieldInfo &) {
+            const auto data = text_state.delete_all();
+            text = std::format("Entered some text: {}", data);
+        }
+    });
+    Text(state, {
+        .text = text,
+        .pos = {.col = 0, .row = 1},
+    });
+    RichText(state, {
+        .text = color_fmt("%(00FF00,#000000)hello,%end %(#FFFFFF,#000000)world%end"),
+        .pos = {.col = 0, .row = 2},
+    });
+
+    EndDrawing(state);
+}
+
 int main() {
+    auto &state = GetState();
+    Initialize(state);
+
+    while (!ShouldWindowClose(state)) {
+        grid_test(state);
+    }
+
+    Cleanup();
+    return 0;
+}
+
+int focus_main() {
     auto &state = GetState();
     Initialize(state);
 
@@ -722,6 +770,9 @@ int main() {
                     CloseWindow(state);
             });
         }
+
+        inpst1.set_focus(table.has_focus("text1"));
+        inpst2.set_focus(table.has_focus("text2"));
 
         BeginDrawing(state);
 
@@ -744,7 +795,6 @@ int main() {
                 .pos = {},
                 .size = GetPaneSize(state),
                 .align = Align::CENTER,
-                .focus = table.has_focus("text1"),
                 .cursor_style = {.bg = table.has_focus("text1") ? COLOR_WHITE : COLOR_GRAY, .fg = COLOR_BLACK},
                 .cursor_style_sel = table.has_focus("text1") 
                                     ? Style{.bg = Color::from_hex(0x24acf2), .fg = COLOR_WHITE} 
@@ -757,7 +807,6 @@ int main() {
                 .pos = {},
                 .size = GetPaneSize(state),
                 .align = Align::BOTTOM_RIGHT,
-                .focus = table.has_focus("text2"),
                 .cursor_style = {.bg = table.has_focus("text2") ? COLOR_WHITE : COLOR_GRAY, .fg = COLOR_BLACK},
                 .cursor_style_sel = table.has_focus("text2") 
                                     ? Style{.bg = Color::from_hex(0x24acf2), .fg = COLOR_WHITE} 
