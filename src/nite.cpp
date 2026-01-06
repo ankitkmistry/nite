@@ -206,6 +206,123 @@ namespace nite
 {
     namespace internal
     {
+        class ColorFormatParser {
+            std::wstring fmt;
+            Style style;
+            std::vector<StyledChar> result;
+            size_t start = 0;
+            size_t index = 0;
+
+          public:
+            ColorFormatParser(const std::wstring &fmt) : fmt(fmt) {}
+
+            Color hex_color() {
+                std::string hex;
+                for (size_t i = 0; i < 6; i++)
+                    hex += wc_to_str(advance());
+                uint32_t value;
+                const auto result = std::from_chars(hex.data(), hex.data() + hex.size(), value, 16);
+                if (result.ec == std::errc())
+                    return Color::from_hex(value);
+                throw std::format_error("invalid color format");
+            }
+
+            std::vector<StyledChar> parse() {
+                if (fmt.empty())
+                    return {};
+                while (wchar_t c = advance()) {
+                    while (c == L'%') {
+                        const auto saved_index = index;
+                        const auto saved_c = c;
+                        try {
+                            if (match(L"(")) {
+                                expect(L"#");
+                                const auto bg = hex_color();
+                                expect(L",");
+                                expect(L"#");
+                                const auto fg = hex_color();
+                                expect(L")");
+
+                                set_style(bg, fg);
+                                if (is_at_end())
+                                    return result;
+                                c = advance();
+                            } else if (match(L"%")) {
+                                start++;
+                                add_chars();
+                                if (is_at_end())
+                                    return result;
+                                c = advance();
+                            } else if (match(L"end")) {
+                                set_style(COLOR_BLACK, COLOR_WHITE);
+                                if (is_at_end())
+                                    return result;
+                                c = advance();
+                            } else {
+                                throw std::format_error("invalid color format");
+                            }
+                        } catch (const std::format_error &) {
+                            // Restore
+                            index = saved_index;
+                            c = saved_c;
+                            break;
+                        }
+                    }
+                    add_chars();
+                }
+                return result;
+            }
+
+          private:
+            void set_style(const Color bg, const Color fg) {
+                this->style = Style(bg, fg);
+                start = index;
+            }
+
+            void add_chars() {
+                for (size_t i = start; i < index; i++)
+                    result.emplace_back(fmt[i], style);
+                start = index;
+            }
+
+            bool is_at_end() const {
+                return index >= fmt.size();
+            }
+
+            bool match(const std::wstring &wstr) {
+                for (size_t i = 0; i < wstr.size(); i++) {
+                    if (peek(i) != wstr[i])
+                        return false;
+                }
+                for (size_t i = 0; i < wstr.size(); i++)
+                    advance();
+                return true;
+            }
+
+            void expect(const std::wstring &wstr) {
+                if (!match(wstr))
+                    throw std::format_error("invalid color format");
+            }
+
+            wchar_t peek(size_t i = 0) {
+                if (index + i >= fmt.size())
+                    throw std::format_error("invalid color format");
+                return fmt[index + i];
+            }
+
+            wchar_t advance() {
+                if (index >= fmt.size())
+                    throw std::format_error("invalid color format");
+                return fmt[index++];
+            }
+        };
+
+        std::vector<StyledChar> clr_fmt(const std::wstring &fmt) {
+            /// Format specification
+            /// "%(#RRGGBB,#RRGGBB)hello%end"
+            return ColorFormatParser(fmt).parse();
+        }
+
         class Box {
           protected:
             Box() = default;
@@ -960,22 +1077,27 @@ namespace nite
         const size_t num_rows = info.row_sizes.size();
         const size_t num_cols = info.col_sizes.size();
 
-        double row_progress = 0.0;
+        size_t row_progress = 0;
         for (size_t row = 0; row < num_rows; row++) {
-            double col_progress = 0.0;
+            size_t col_progress = 0;
             for (size_t col = 0; col < num_cols; col++) {
-                Size s = {
-                        .width = static_cast<size_t>(info.col_sizes[col] / 100.0 * info.size.width),
-                        .height = static_cast<size_t>(info.row_sizes[row] / 100.0 * info.size.height),
-                };
-                Position p = {
-                        .col = static_cast<size_t>(col_progress * info.size.width),
-                        .row = static_cast<size_t>(row_progress * info.size.height),
-                };
+                Position p = {.col = col_progress, .row = row_progress};
+                Size s;
+
+                if (col == num_cols - 1)
+                    s.width = info.size.width - col_progress;
+                else
+                    s.width = info.size.width * info.col_sizes[col] / 100.0;
+
+                if (row == num_rows - 1)
+                    s.height = info.size.height - row_progress;
+                else
+                    s.height = info.size.height * info.row_sizes[row] / 100.0;
+
                 grid.emplace_back(p, s);
-                col_progress += info.col_sizes[col] / 100.0;
+                col_progress += info.size.width * info.col_sizes[col] / 100.0;
             }
-            row_progress += info.row_sizes[row] / 100.0;
+            row_progress += info.size.height * info.row_sizes[row] / 100.0;
         }
 
         state.impl->emplace_box<internal::GridBox>(GetPanePosition(state) + info.pos, info.size, num_cols, num_rows, grid);
@@ -2003,7 +2125,7 @@ namespace nite
     }
 
     void TextInput(State &state, TextInputState &text_state, TextInputInfo info) {
-        if (info.focus)
+        if (text_state.has_focus())
             for (const Event &event: state.impl->events) {
                 HandleEvent(event, [&](const KeyEvent &ev) {
                     if (!ev.key_down)
@@ -2116,6 +2238,118 @@ namespace nite
             .size = info.size,
             .style = info.text_style,
             .wrap = info.wrap,
+            .align = info.align,
+        });
+        // clang-format on
+    }
+
+    void TextField(State &state, TextInputState &text_state, TextFieldInfo info) {
+        if (text_state.has_focus())
+            for (const Event &event: state.impl->events) {
+                HandleEvent(event, [&](const KeyEvent &ev) {
+                    if (!ev.key_down)
+                        return;
+                    switch (ev.key_code) {
+                    case KeyCode::ESCAPE:
+                        text_state.end_selection();
+                        break;
+                    case KeyCode::BACKSPACE:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                text_state.erase_selection();
+                                text_state.end_selection();
+                            } else
+                                text_state.on_key_backspace();
+                        }
+                        break;
+                    case KeyCode::DELETE:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                text_state.erase_selection();
+                                text_state.end_selection();
+                            } else
+                                text_state.on_key_delete();
+                        }
+                        break;
+                    case KeyCode::LEFT:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                const auto selection_start = text_state.get_selection_range().first;
+                                text_state.end_selection();
+                                text_state.set_cursor(selection_start);
+                            } else
+                                text_state.move_left();
+                        }
+                        if (ev.modifiers & KEY_SHIFT) {
+                            text_state.start_selection();
+                            text_state.move_left();
+                        }
+                        break;
+                    case KeyCode::RIGHT:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected()) {
+                                const auto selection_end = text_state.get_selection_range().second;
+                                text_state.end_selection();
+                                text_state.set_cursor(selection_end);
+                            } else
+                                text_state.move_right();
+                        }
+                        if (ev.modifiers & KEY_SHIFT) {
+                            text_state.start_selection();
+                            text_state.move_right();
+                        }
+                        break;
+                    case KeyCode::HOME:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected())
+                                text_state.end_selection();
+                            text_state.go_home();
+                        }
+                        if (ev.modifiers & KEY_SHIFT) {
+                            text_state.start_selection();
+                            text_state.go_home();
+                        }
+                        break;
+                    case KeyCode::END:
+                        if (ev.modifiers == 0) {
+                            if (text_state.is_selected())
+                                text_state.end_selection();
+                            text_state.go_end();
+                        }
+                        if (ev.modifiers & KEY_SHIFT) {
+                            text_state.start_selection();
+                            text_state.go_end();
+                        }
+                        break;
+                    case KeyCode::INSERT:
+                        if (ev.modifiers == 0)
+                            text_state.toggle_insert_mode();
+                        break;
+                    case KeyCode::ENTER:
+                        if (text_state.is_selected())
+                            text_state.end_selection();
+                        if (info.on_enter)
+                            info.on_enter(std::ref(info));
+                        break;
+                    default:
+                        if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
+                            if (text_state.is_selected()) {
+                                text_state.erase_selection();
+                                text_state.end_selection();
+                            }
+                            text_state.insert_char(ev.key_char);
+                        }
+                        break;
+                    }
+                });
+            }
+
+        // clang-format off
+        RichTextBox(state, {
+            .text = text_state.process(info.text_style, info.selection_style, info.cursor_style, info.cursor_style_ins, info.cursor_style_sel),
+            .pos = info.pos,
+            .size = {.width = info.width, .height = 1},
+            .style = info.text_style,
             .align = info.align,
         });
         // clang-format on

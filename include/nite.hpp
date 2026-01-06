@@ -182,6 +182,71 @@ namespace nite
         ~StyledChar() = default;
     };
 
+    namespace internal
+    {
+        std::vector<StyledChar> clr_fmt(const std::wstring &fmt);
+    }
+
+    /**
+     * @brief This function performs color formatting and returns a vector of styled chars
+     * which can be used to render text. 
+     *
+     * First, std::vformat is applied to fmt for any kind of custom formatting. Then the output
+     * string from std::vformat is parsed according to the following syntax.
+     *
+     * %(#RRGGBB, #RRGGBB) -> Describes a style with bg (first element) and fg (second element)
+     *                        where RRGGBB are hex codes of the color. Any text after this 
+     *                        marker will be styled using these colors.
+     * %end                -> Describes the end of the previous marker and sets the style to default.
+     *                        It is not an error to pair the markers as this marker only resets the style
+     *                        to default.
+     *                        (default style is bg=COLOR_BLACK, fg=COLOR_WHITE)
+     * %%                  -> Outputs a single %
+     * 
+     * Any text before the first marker is styled using default style (bg=BLACK, fg=WHITE). 
+     * If the function finds any error in the color format, then it simply outputs those characters
+     * instead of doing anything. Only std::format_error is thrown when std::vformat is called.
+     * 
+     * @throws std::format_error only thrown by std::vformat
+     * @param [in] fmt the format string
+     * @param [in] args the format arguments
+     * @return std::vector<StyledChar>
+     */
+    template<class... Args>
+    std::vector<StyledChar> color_fmt(std::format_string<Args...> fmt, Args... args) {
+        return internal::clr_fmt(str_to_wstr(std::vformat(fmt.get(), std::make_format_args(args...))));
+    }
+
+    /**
+     * @brief This function performs color formatting and returns a vector of styled chars
+     * which can be used to render text. 
+     *
+     * First, std::vformat is applied to fmt for any kind of custom formatting. Then the output
+     * string from std::vformat is parsed according to the following syntax.
+     *
+     * %(#RRGGBB, #RRGGBB) -> Describes a style with bg (first element) and fg (second element)
+     *                        where RRGGBB are hex codes of the color. Any text after this 
+     *                        marker will be styled using these colors.
+     * %end                -> Describes the end of the previous marker and sets the style to default.
+     *                        It is not an error to pair the markers as this marker only resets the style
+     *                        to default.
+     *                        (default style is bg=COLOR_BLACK, fg=COLOR_WHITE)
+     * %%                  -> Outputs a single %
+     * 
+     * Any text before the first marker is styled using default style (bg=BLACK, fg=WHITE). 
+     * If the function finds any error in the color format, then it simply outputs those characters
+     * instead of doing anything. Only std::format_error is thrown when std::vformat is called.
+     * 
+     * @throws std::format_error only thrown by std::vformat
+     * @param [in] fmt the format wstring
+     * @param [in] args the format arguments
+     * @return std::vector<StyledChar>
+     */
+    template<class... Args>
+    std::vector<StyledChar> color_fmt(std::wformat_string<Args...> fmt, Args... args) {
+        return internal::clr_fmt(std::vformat(fmt.get(), std::make_wformat_args(args...)));
+    }
+
     /**
      * Represents a box border
      */
@@ -2013,6 +2078,7 @@ namespace nite
     Size SimpleTable(State &state, SimpleTableInfo info);
 
     class TextInputState {
+        bool focus = true;
         bool insert_mode = false;
 
         std::string data = "";
@@ -2116,6 +2182,34 @@ namespace nite
         process(const Style text_style, const Style selection_style, const Style cursor_style, const Style cursor_style_ins,
                 const Style cursor_style_sel);
 
+        std::string delete_line() {
+            end_selection();
+            go_home();
+            start_selection();
+            go_end();
+            const auto result = get_selected_text();
+            erase_selection();
+            end_selection();
+            return result;
+        }
+
+        std::string delete_all() {
+            const auto result = data;
+            data = "";
+            cursor = 0;
+            selection_mode = false;
+            selection_pivot = 0;
+            return result;
+        }
+
+        bool has_focus() const {
+            return focus;
+        }
+
+        void set_focus(bool focus) {
+            this->focus = focus;
+        }
+
         bool is_insert_mode() const {
             return insert_mode;
         }
@@ -2150,8 +2244,6 @@ namespace nite
         bool handle_enter_as_event = false;
         /// Alignment of the text in the text input box
         Align align = Align::TOP_LEFT;
-        /// Whether the thing is focused
-        bool focus = false;
 
         /// Text style in normal mode
         Style text_style = {.bg = COLOR_BLACK, .fg = COLOR_WHITE};
@@ -2169,6 +2261,31 @@ namespace nite
     };
 
     void TextInput(State &state, TextInputState &text_state, TextInputInfo info);
+
+    struct TextFieldInfo {
+        /// Position of the text field
+        Position pos = {};
+        /// Width of the text field
+        size_t width = 0;
+        /// Alignment of the text in the text field
+        Align align = Align::TOP_LEFT;
+
+        /// Text style in normal mode
+        Style text_style = {.bg = COLOR_BLACK, .fg = COLOR_WHITE};
+        /// Text style of selected text
+        Style selection_style = {.bg = Color::from_hex(0x3737ac), .fg = COLOR_WHITE};
+        /// Cursor style in normal mode
+        Style cursor_style = {.bg = COLOR_WHITE, .fg = COLOR_BLACK};
+        /// Cursor style in insert mode
+        Style cursor_style_ins = {.bg = Color::from_hex(0xe63f32), .fg = COLOR_WHITE};
+        /// Cursor style in selection mode
+        Style cursor_style_sel = {.bg = Color::from_hex(0x24acf2), .fg = COLOR_WHITE};
+
+        /// Handler triggered when enter is pressed (only when handle_enter_as_event is true)
+        HandlerFn<TextFieldInfo> on_enter = {};
+    };
+
+    void TextField(State &state, TextInputState &text_state, TextFieldInfo info);
 
     enum class CheckBoxValue {
         UNCHECKED,
