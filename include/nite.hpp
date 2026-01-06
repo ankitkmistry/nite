@@ -1381,7 +1381,8 @@ namespace nite
     State &GetState();
 
     /**
-     * Initializes the console and prepares all necessary components
+     * Initializes the console and prepares all necessary components.
+     * Caps the FPS of the console screen at 60.
      * @param [inout] state the console state to work on
      * @return Result
      */
@@ -1412,11 +1413,30 @@ namespace nite
      */
     Size GetPaneSize(const State &state);
     /**
-     * Returns the delta time in seconds
+     * Returns the delta time of the previous frame in seconds
      * @param [inout] state the console state to work on
      * @return double 
      */
     double GetDeltaTime(const State &state);
+    /**
+     * Returns the current frames per second
+     * @param [inout] state the console state to work on
+     * @return double 
+     */
+    double GetFPS(const State &state);
+    /**
+     * Returns the target FPS
+     * @param [inout] state the console state to work on
+     * @return double 
+     */
+    double GetTargetFPS(const State &state);
+    /**
+     * Caps the FPS of the console screen at @p fps. 
+     * Capping the FPS can also be termed as setting the
+     * target FPS.
+     * @param [inout] state the console state to work on
+     */
+    void SetTargetFPS(const State &state, double fps);
     /**
      * Returns whether the console window should be closed
      * @param [inout] state the console state to work on

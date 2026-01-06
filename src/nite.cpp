@@ -13,6 +13,7 @@
 #include <optional>
 #include <queue>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -565,6 +566,8 @@ namespace nite
     }    // namespace internal
 }    // namespace nite
 
+using nite_clock = std::chrono::high_resolution_clock;
+
 namespace nite
 {
     struct KeyState {
@@ -581,11 +584,15 @@ namespace nite
         bool closed = false;
 
         // Render mechanism
-        std::chrono::duration<double> delta_time;
         std::queue<internal::CellBuffer> swapchain;
         std::vector<std::unique_ptr<internal::Box>> box_stack;
 
       public:
+        // Delta time mechanism
+        std::chrono::duration<double> delta_time;
+        std::chrono::duration<double> target_delta_time;
+        std::optional<std::chrono::time_point<nite_clock>> prev_time = std::nullopt;
+
         // Events mechanism
         std::list<Event> events;
 
@@ -660,14 +667,6 @@ namespace nite
 
         size_t box_stack_count() const {
             return box_stack.size();
-        }
-
-        std::chrono::duration<double> get_delta_time() const {
-            return delta_time;
-        }
-
-        void set_delta_time(std::chrono::duration<double> time) {
-            delta_time = time;
         }
 
         // std::optional<Position> allowable(size_t col, size_t row) {
@@ -758,7 +757,20 @@ namespace nite
     }
 
     double GetDeltaTime(const State &state) {
-        return state.impl->get_delta_time().count();
+        return state.impl->delta_time.count();
+    }
+
+    double GetFPS(const State &state) {
+        return 1.0 / state.impl->delta_time.count();
+    }
+
+    double GetTargetFPS(const State &state) {
+        return state.impl->target_delta_time.count();
+    }
+
+    void SetTargetFPS(const State &state, double fps) {
+        state.impl->delta_time = std::chrono::duration<double>(1 / fps);
+        state.impl->target_delta_time = std::chrono::duration<double>(1 / fps);
     }
 
     bool ShouldWindowClose(const State &state) {
@@ -768,10 +780,10 @@ namespace nite
     Result Initialize(State &state) {
         if (!internal::console::is_tty())
             return Result::Error("cannot initialize in a non-terminal environment");
-        if (const auto result = internal::console::init(); !result)
-            return result;
+        $(internal::console::init());
 
         state.impl->set_closed(false);
+        SetTargetFPS(state, 60);
         return Result::Ok;
     }
 
@@ -791,8 +803,6 @@ namespace nite
         case 0:
             break;
         case 1: {
-            const auto start = std::chrono::high_resolution_clock::now();
-
             const auto &cur_buf = state.impl->get_current_buffer();
             const auto cur_size = cur_buf.size();
 
@@ -803,13 +813,16 @@ namespace nite
                 }
             }
 
-            const auto end = std::chrono::high_resolution_clock::now();
-            state.impl->set_delta_time(end - start);
+            const auto now_time = nite_clock::now();
+            if (state.impl->prev_time)
+                state.impl->delta_time = now_time - *state.impl->prev_time;
+            state.impl->prev_time = now_time;
+            // Sleep this thread for other processes to work
+            if (state.impl->delta_time < state.impl->target_delta_time)
+                std::this_thread::sleep_for(state.impl->target_delta_time - state.impl->delta_time);
             break;
         }
         default: {
-            const auto start = std::chrono::high_resolution_clock::now();
-
             const auto prev_buf = state.impl->pop_current_buffer();
             const auto prev_size = prev_buf.size();
 
@@ -835,8 +848,13 @@ namespace nite
                 }
             }
 
-            const auto end = std::chrono::high_resolution_clock::now();
-            state.impl->set_delta_time(end - start);
+            const auto now_time = nite_clock::now();
+            if (state.impl->prev_time)
+                state.impl->delta_time = now_time - *state.impl->prev_time;
+            state.impl->prev_time = now_time;
+            // Sleep this thread for other processes to work
+            if (state.impl->delta_time < state.impl->target_delta_time)
+                std::this_thread::sleep_for(state.impl->target_delta_time - state.impl->delta_time);
             break;
         }
         }
@@ -4004,10 +4022,10 @@ namespace nite::internal
         std::string text;
 
         // Previous mouse click time point
-        std::chrono::high_resolution_clock::time_point prev_mcl_tp = std::chrono::high_resolution_clock::time_point();
+        nite_clock::time_point prev_mcl_tp = nite_clock::time_point();
 
         Result parse_mouse(Event &event) {
-            const auto mev_tp = std::chrono::high_resolution_clock::now();
+            const auto mev_tp = nite_clock::now();
 
             $(expect_csi());
             $(expect('<'));
@@ -4087,7 +4105,7 @@ namespace nite::internal
                     // Double click time difference is 500ms
                     if (mev_tp - prev_mcl_tp <= std::chrono::milliseconds(500)) {
                         kind = MouseEventKind::DOUBLE_CLICK;
-                        prev_mcl_tp = std::chrono::high_resolution_clock::time_point();
+                        prev_mcl_tp = nite_clock::time_point();
                     } else
                         prev_mcl_tp = mev_tp;
                 }
