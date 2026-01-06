@@ -239,6 +239,8 @@ namespace nite
                                 expect(L"#");
                                 const auto bg = hex_color();
                                 expect(L",");
+                                while (peek() == L' ')
+                                    advance();    // Eat up whitespaces
                                 expect(L"#");
                                 const auto fg = hex_color();
                                 expect(L")");
