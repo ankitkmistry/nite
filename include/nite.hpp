@@ -118,6 +118,10 @@ namespace nite
         constexpr bool operator!=(const Color &other) const {
             return !(*this == other);
         }
+
+        std::string to_string_hex() const {
+            return std::format("{:02X}{:02X}{:02X}", r, g, b);
+        }
     };
 
 #define COLOR_WHITE       (Color::from_hex(0xFFFFFF))
