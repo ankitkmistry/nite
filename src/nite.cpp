@@ -231,7 +231,8 @@ namespace nite
             std::vector<StyledChar> parse() {
                 if (fmt.empty())
                     return {};
-                while (wchar_t c = advance()) {
+                while (!is_at_end()) {
+                    wchar_t c = advance();
                     while (c == L'%') {
                         const auto saved_index = index;
                         const auto saved_c = c;
@@ -321,8 +322,6 @@ namespace nite
         };
 
         std::vector<StyledChar> clr_fmt(const std::wstring &fmt) {
-            /// Format specification
-            /// "%(#RRGGBB,#RRGGBB)hello%end"
             return ColorFormatParser(fmt).parse();
         }
 
