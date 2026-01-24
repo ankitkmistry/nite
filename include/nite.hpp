@@ -1942,6 +1942,21 @@ namespace nite
      */
     size_t RichText(State &state, RichTextInfo info);
 
+    enum class OverflowAction {
+        /// Performs no action when text is overflowed
+        NONE,
+        /// Trims text upto the text box width
+        CROP,
+        /// Wraps the overflowing text in the next line
+        WRAP,
+        /// Shows a ellipsis at the left side of the text
+        ELLIPSIS_LEFT,
+        /// Shows a ellipsis at the center of the text
+        ELLIPSIS_CENTER,
+        /// Shows a ellipsis at the right side of the text
+        ELLIPSIS_RIGHT,
+    };
+
     struct TextBoxInfo {
         /// The text to display
         std::string text = {};
@@ -1951,8 +1966,8 @@ namespace nite
         Size size = {};
         /// Style of the text box
         Style style = {};
-        /// Whether text should be wrapped
-        bool wrap = true;
+        /// What to do when text is overflowed
+        OverflowAction overflow = OverflowAction::NONE;
         /// Alignment of the text inside the text box
         Align align = Align::TOP_LEFT;
         /// Whether the thing is focused
@@ -1985,8 +2000,8 @@ namespace nite
         Size size = {};
         /// Default style of the rich text box
         Style style = {};
-        /// Whether text should be wrapped
-        bool wrap = true;
+        /// What to do when text is overflowed
+        OverflowAction overflow = OverflowAction::NONE;
         /// Alignment of the text inside the text box
         Align align = Align::TOP_LEFT;
         /// Whether the thing is focused
@@ -2262,8 +2277,8 @@ namespace nite
         Position pos = {};
         /// Size of the text input box
         Size size = {};
-        /// Whether text should be wrapped
-        bool wrap = true;
+        /// What to do when text is overflowed
+        OverflowAction overflow = OverflowAction::NONE;
         /// Whether to handle enter as an event
         bool handle_enter_as_event = false;
         /// Alignment of the text in the text input box

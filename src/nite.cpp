@@ -178,17 +178,6 @@ static inline constexpr bool is_print(char c) {
     return 32 <= c && c <= 126;
 }
 
-// static std::string get_printable_str(const std::string &str) {
-//     std::string result;
-//     for (const char c: str) {
-//         if (c == *ESC)
-//             result += "ESC";
-//         else
-//             result.push_back(c);
-//     }
-//     return result;
-// }
-
 template<std::unsigned_integral Integer>
 static inline constexpr Integer saturated_sub(Integer a, Integer b) {
     if (a >= b)
@@ -590,7 +579,7 @@ namespace nite
         // Delta time mechanism
         std::chrono::duration<double> delta_time;
         std::chrono::duration<double> target_delta_time;
-        std::optional<std::chrono::time_point<nite_clock>> prev_time = std::nullopt;
+        std::chrono::time_point<nite_clock> prev_time;
 
         // Events mechanism
         std::list<Event> events;
@@ -813,12 +802,13 @@ namespace nite
             }
 
             const auto now_time = nite_clock::now();
-            if (state.impl->prev_time)
-                state.impl->delta_time = now_time - *state.impl->prev_time;
+            state.impl->delta_time = now_time - state.impl->prev_time;
             state.impl->prev_time = now_time;
             // Sleep this thread for other processes to work
-            if (state.impl->delta_time < state.impl->target_delta_time)
+            if (state.impl->delta_time < state.impl->target_delta_time) {
                 std::this_thread::sleep_for(state.impl->target_delta_time - state.impl->delta_time);
+                state.impl->delta_time = state.impl->target_delta_time;
+            }
             break;
         }
         default: {
@@ -848,12 +838,13 @@ namespace nite
             }
 
             const auto now_time = nite_clock::now();
-            if (state.impl->prev_time)
-                state.impl->delta_time = now_time - *state.impl->prev_time;
+            state.impl->delta_time = now_time - state.impl->prev_time;
             state.impl->prev_time = now_time;
             // Sleep this thread for other processes to work
-            if (state.impl->delta_time < state.impl->target_delta_time)
+            if (state.impl->delta_time < state.impl->target_delta_time) {
                 std::this_thread::sleep_for(state.impl->target_delta_time - state.impl->delta_time);
+                state.impl->delta_time = state.impl->target_delta_time;
+            }
             break;
         }
         }
@@ -1459,11 +1450,50 @@ namespace nite
         for (size_t start = 0, i = 0; i <= info.text.size(); i++) {
             if (i == info.text.size() || info.text[i] == '\n') {
                 auto line = info.text.substr(start, i - start);
-                if (info.wrap)
+                if (line.size() <= info.size.width) {
+                    lines.push_back(std::move(line));
+                    continue;
+                }
+
+                switch (info.overflow) {
+                case OverflowAction::NONE:
+                    lines.push_back(std::move(line));
+                    break;
+                case OverflowAction::CROP:
+                    lines.push_back(line.substr(0, info.size.width));
+                    break;
+                case OverflowAction::WRAP:
                     for (size_t i = 0; i < line.size(); i += info.size.width)
                         lines.push_back(line.substr(i, info.size.width));
-                else
+                    break;
+                case OverflowAction::ELLIPSIS_LEFT:
+                    line = line.substr(line.size() - info.size.width);
+                    line.erase(0);
+                    line.insert(0, "…");
                     lines.push_back(std::move(line));
+                    break;
+                case OverflowAction::ELLIPSIS_CENTER: {
+                    const auto left_cnt = info.size.width / 2;
+                    const auto right_cnt = info.size.width - left_cnt;
+                    const auto center = left_cnt;
+
+                    const std::string left(line.begin(), line.begin() + left_cnt);
+                    const std::string right(line.end() - right_cnt, line.end());
+
+                    line.clear();
+                    line.insert(line.end(), left.begin(), left.end());
+                    line.append("…");
+                    line.insert(line.end(), right.begin(), right.end());
+                    lines.push_back(std::move(line));
+                    break;
+                }
+                case OverflowAction::ELLIPSIS_RIGHT:
+                    line = line.substr(0, info.size.width);
+                    line.pop_back();
+                    line.append("…");
+                    lines.push_back(std::move(line));
+                    break;
+                }
                 start = i + 1;
             }
         }
@@ -1666,11 +1696,48 @@ namespace nite
                         lines.emplace_back();
                 } else {
                     std::vector<StyledChar> line(info.text.begin() + start, info.text.begin() + i);
-                    if (info.wrap) {
+                    if (line.size() <= info.size.width) {
+                        lines.push_back(std::move(line));
+                        continue;
+                    }
+                    switch (info.overflow) {
+                    case OverflowAction::NONE:
+                        lines.push_back(std::move(line));
+                        break;
+                    case OverflowAction::CROP:
+                        line.erase(line.begin() + info.size.width, line.end());
+                        lines.push_back(std::move(line));
+                        break;
+                    case OverflowAction::WRAP:
                         for (size_t i = 0; i < line.size(); i += info.size.width)
                             lines.emplace_back(line.begin() + i, line.begin() + std::min(line.size(), i + info.size.width));
-                    } else
+                        break;
+                    case OverflowAction::ELLIPSIS_LEFT:
+                        line.erase(line.begin(), line.end() - info.size.width);
+                        line.front().value = L'…';
                         lines.push_back(std::move(line));
+                        break;
+                    case OverflowAction::ELLIPSIS_CENTER: {
+                        const auto left_cnt = info.size.width / 2;
+                        const auto right_cnt = info.size.width - left_cnt;
+                        const auto center = left_cnt;
+
+                        std::vector<StyledChar> left(line.begin(), line.begin() + left_cnt);
+                        std::vector<StyledChar> right(line.end() - right_cnt, line.end());
+
+                        line.clear();
+                        line.insert(line.end(), left.begin(), left.end());
+                        line.insert(line.end(), right.begin(), right.end());
+                        line[center].value = L'…';
+                        lines.push_back(std::move(line));
+                        break;
+                    }
+                    case OverflowAction::ELLIPSIS_RIGHT:
+                        line.erase(line.begin() + info.size.width, line.end());
+                        line.back().value = L'…';
+                        lines.push_back(std::move(line));
+                        break;
+                    }
                 }
                 start = i + 1;
             }
@@ -2291,7 +2358,7 @@ namespace nite
             .pos = info.pos,
             .size = info.size,
             .style = info.text_style,
-            .wrap = info.wrap,
+            .overflow = info.overflow,
             .align = info.align,
         });
         // clang-format on
