@@ -2343,7 +2343,12 @@ namespace nite
                         }
                         break;
                     default:
-                        if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
+                        if (ev.modifiers & KEY_CTRL && ev.key_code == KeyCode::K_A) {
+                            text_state.end_selection();
+                            text_state.go_first();
+                            text_state.start_selection();
+                            text_state.go_last();
+                        } else if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
                             if (text_state.is_selected()) {
                                 text_state.erase_selection();
                                 text_state.end_selection();
@@ -2457,7 +2462,12 @@ namespace nite
                             info.on_enter(std::ref(info));
                         break;
                     default:
-                        if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
+                        if (ev.modifiers & KEY_CTRL && ev.key_code == KeyCode::K_A) {
+                            text_state.end_selection();
+                            text_state.go_first();
+                            text_state.start_selection();
+                            text_state.go_last();
+                        } else if ((ev.modifiers == 0 || ev.modifiers & KEY_SHIFT) && std::isprint(ev.key_char)) {
                             if (text_state.is_selected()) {
                                 text_state.erase_selection();
                                 text_state.end_selection();
