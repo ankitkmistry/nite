@@ -2438,7 +2438,7 @@ namespace nite
 template<>
 struct std::formatter<nite::Position> {
     constexpr auto parse(std::format_parse_context &ctx) {
-        return ctx.end();
+        return ctx.begin();
     }
 
     auto format(const nite::Position &p, std::format_context &ctx) const {
@@ -2449,7 +2449,7 @@ struct std::formatter<nite::Position> {
 template<>
 struct std::formatter<nite::Size> {
     constexpr auto parse(std::format_parse_context &ctx) {
-        return ctx.end();
+        return ctx.begin();
     }
 
     auto format(const nite::Size &s, std::format_context &ctx) const {
@@ -2460,7 +2460,7 @@ struct std::formatter<nite::Size> {
 template<>
 struct std::formatter<nite::Color> {
     constexpr auto parse(std::format_parse_context &ctx) {
-        return ctx.end();
+        return ctx.begin();
     }
 
     auto format(const nite::Color &c, std::format_context &ctx) const {
