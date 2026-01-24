@@ -2222,13 +2222,16 @@ namespace nite
 
     std::vector<StyledChar> TextInputState::process(
             const Style text_style, const Style selection_style, const Style cursor_style, const Style cursor_style_ins, const Style cursor_style_sel
-    ) {
+    ) const {
         std::vector<StyledChar> result;
 
         const auto [selection_start, selection_end] = get_selection_range();
         const Style cur_style = selection_mode ? cursor_style_sel : insert_mode ? cursor_style_ins : cursor_style;
 
-        for (size_t i = 0; i <= data.size(); i++) {
+        const auto view_start = get_view_start().value_or(0);
+        const auto view_end = get_view_end().value_or(data.size());
+
+        for (size_t i = view_start; i <= view_end; i++) {
             if (i == cursor) {
                 if (i == data.size() || data[i] == '\n')
                     result.push_back(StyledChar{.value = ' ', .style = cur_style});
@@ -2364,7 +2367,8 @@ namespace nite
         // clang-format on
     }
 
-    void TextField(State &state, TextInputState &text_state, TextFieldInfo info) {
+    void TextField(State &state, TextFieldState &text_state, TextFieldInfo info) {
+        text_state.set_width(info.width);
         if (text_state.has_focus())
             for (const Event &event: state.impl->events) {
                 HandleEvent(event, [&](const KeyEvent &ev) {
@@ -2482,17 +2486,14 @@ namespace nite
         case CheckBoxValue::UNCHECKED:
             result.push_back(info.check_box.unchecked);
             result.push_back({' ', info.check_box.unchecked.style});
-            // result.push_back({' ', info.check_box.unchecked.style});
             break;
         case CheckBoxValue::CHECKED:
             result.push_back(info.check_box.checked);
             result.push_back({' ', info.check_box.checked.style});
-            // result.push_back({' ', info.check_box.checked.style});
             break;
         case CheckBoxValue::INDETERMINATE:
             result.push_back(info.check_box.indeterm);
             result.push_back({' ', info.check_box.indeterm.style});
-            // result.push_back({' ', info.check_box.indeterm.style});
             break;
         }
         for (char c: info.text)

@@ -124,36 +124,36 @@ namespace nite
         }
     };
 
-#define COLOR_WHITE       (Color::from_hex(0xFFFFFF))
-#define COLOR_SILVER      (Color::from_hex(0xC0C0C0))
-#define COLOR_GRAY        (Color::from_hex(0x808080))
-#define COLOR_BLACK       (Color::from_hex(0x000000))
-#define COLOR_RED         (Color::from_hex(0xFF0000))
-#define COLOR_MAROON      (Color::from_hex(0x800000))
-#define COLOR_YELLOW      (Color::from_hex(0xFFFF00))
-#define COLOR_OLIVE       (Color::from_hex(0x808000))
-#define COLOR_LIME        (Color::from_hex(0x00FF00))
-#define COLOR_GREEN       (Color::from_hex(0x008000))
-#define COLOR_AQUA        (Color::from_hex(0x00FFFF))
-#define COLOR_TEAL        (Color::from_hex(0x008080))
-#define COLOR_BLUE        (Color::from_hex(0x0000FF))
-#define COLOR_NAVY        (Color::from_hex(0x000080))
-#define COLOR_FUCHSIA     (Color::from_hex(0xFF00FF))
-#define COLOR_PURPLE      (Color::from_hex(0x800080))
+#define COLOR_WHITE   (Color::from_hex(0xFFFFFF))
+#define COLOR_SILVER  (Color::from_hex(0xC0C0C0))
+#define COLOR_GRAY    (Color::from_hex(0x808080))
+#define COLOR_BLACK   (Color::from_hex(0x000000))
+#define COLOR_RED     (Color::from_hex(0xFF0000))
+#define COLOR_MAROON  (Color::from_hex(0x800000))
+#define COLOR_YELLOW  (Color::from_hex(0xFFFF00))
+#define COLOR_OLIVE   (Color::from_hex(0x808000))
+#define COLOR_LIME    (Color::from_hex(0x00FF00))
+#define COLOR_GREEN   (Color::from_hex(0x008000))
+#define COLOR_AQUA    (Color::from_hex(0x00FFFF))
+#define COLOR_TEAL    (Color::from_hex(0x008080))
+#define COLOR_BLUE    (Color::from_hex(0x0000FF))
+#define COLOR_NAVY    (Color::from_hex(0x000080))
+#define COLOR_FUCHSIA (Color::from_hex(0xFF00FF))
+#define COLOR_PURPLE  (Color::from_hex(0x800080))
 
-#define STYLE_RESET       (1 << 0)
-#define STYLE_BOLD        (1 << 1)
-#define STYLE_LIGHT       (1 << 2)
-#define STYLE_ITALIC      (1 << 3)
-#define STYLE_UNDERLINE   (1 << 4)
-#define STYLE_BLINK       (1 << 5)
-#define STYLE_INVERSE     (1 << 6)
-#define STYLE_INVISIBLE   (1 << 7)
-#define STYLE_CROSSED_OUT (1 << 8)
-#define STYLE_UNDERLINE2  (1 << 9)
-
-#define STYLE_NO_FG       (1 << 10)
-#define STYLE_NO_BG       (1 << 11)
+/// Refer to: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Functions-using-CSI-_-ordered-by-the-final-character-lparen-s-rparen:CSI-Pm-m.1CA7
+#define STYLE_RESET       (1 << 0)     /// Reset to normal terminal style
+#define STYLE_BOLD        (1 << 1)     /// Bold text
+#define STYLE_LIGHT       (1 << 2)     /// Decreased intensity text
+#define STYLE_ITALIC      (1 << 3)     /// Italicized text
+#define STYLE_UNDERLINE   (1 << 4)     /// Underlined text
+#define STYLE_BLINK       (1 << 5)     /// Blinking text
+#define STYLE_INVERSE     (1 << 6)     /// Blinking text
+#define STYLE_INVISIBLE   (1 << 7)     /// Hidden text
+#define STYLE_CROSSED_OUT (1 << 8)     /// Crossed out text
+#define STYLE_UNDERLINE2  (1 << 9)     /// Doubly underlined text
+#define STYLE_NO_FG       (1 << 10)    /// Do not use fg color
+#define STYLE_NO_BG       (1 << 11)    /// Do not use bg color
 
     /**
      * Represent the style of a cell
@@ -2117,6 +2117,7 @@ namespace nite
     Size SimpleTable(State &state, SimpleTableInfo info);
 
     class TextInputState {
+      protected:
         bool focus = true;
         bool insert_mode = false;
 
@@ -2132,7 +2133,7 @@ namespace nite
         TextInputState(TextInputState &&) = default;
         TextInputState &operator=(const TextInputState &) = default;
         TextInputState &operator=(TextInputState &&) = default;
-        ~TextInputState() = default;
+        virtual ~TextInputState() = default;
 
         void insert_char(char c) {
             if (insert_mode)
@@ -2158,6 +2159,7 @@ namespace nite
                 cursor -= delta;
             else
                 cursor = 0;
+            on_cursor_change();
         }
 
         void move_right(size_t delta = 1) {
@@ -2165,16 +2167,29 @@ namespace nite
                 cursor = data.size();
             else
                 cursor += delta;
+            on_cursor_change();
+        }
+
+        void go_first() {
+            cursor = 0;
+            on_cursor_change();
+        }
+
+        void go_last() {
+            cursor = data.size();
+            on_cursor_change();
         }
 
         void go_home() {
             const auto idx = data.substr(0, cursor).find_last_of('\n');
             cursor = cursor == std::string::npos ? 0 : idx + 1;
+            on_cursor_change();
         }
 
         void go_end() {
             const auto idx = data.substr(cursor).find_first_of('\n');
             cursor = idx == std::string::npos ? data.size() : idx + cursor;
+            on_cursor_change();
         }
 
         void toggle_insert_mode() {
@@ -2194,13 +2209,14 @@ namespace nite
             const auto [selection_start, selection_end] = get_selection_range();
             data.erase(selection_start, selection_end - selection_start);
             cursor = selection_pivot = selection_start;
+            on_cursor_change();
         }
 
         void end_selection() {
             selection_mode = false;
         }
 
-        std::pair<size_t, size_t> get_selection_range() {
+        std::pair<size_t, size_t> get_selection_range() const {
             if (!selection_mode)
                 return {0, 0};
             const size_t selection_start = cursor >= selection_pivot ? selection_pivot : cursor;
@@ -2219,7 +2235,7 @@ namespace nite
 
         std::vector<StyledChar>
         process(const Style text_style, const Style selection_style, const Style cursor_style, const Style cursor_style_ins,
-                const Style cursor_style_sel);
+                const Style cursor_style_sel) const;
 
         std::string delete_line() {
             end_selection();
@@ -2238,6 +2254,7 @@ namespace nite
             cursor = 0;
             selection_mode = false;
             selection_pivot = 0;
+            on_cursor_change();
             return result;
         }
 
@@ -2265,11 +2282,21 @@ namespace nite
             return cursor;
         }
 
-        void set_cursor(size_t index) {
-            if (index >= data.size())
-                cursor = data.size();
-            cursor = index;
+        void set_cursor(size_t cursor) {
+            this->cursor = cursor;
+            on_cursor_change();
         }
+
+      protected:
+        virtual std::optional<size_t> get_view_start() const {
+            return std::nullopt;
+        }
+
+        virtual std::optional<size_t> get_view_end() const {
+            return std::nullopt;
+        }
+
+        virtual void on_cursor_change() {}
     };
 
     struct TextInputInfo {
@@ -2301,6 +2328,43 @@ namespace nite
 
     void TextInput(State &state, TextInputState &text_state, TextInputInfo info);
 
+    class TextFieldState : public TextInputState {
+        size_t view_pivot = 0;
+        size_t width = 0;
+
+      public:
+        TextFieldState() = default;
+        TextFieldState(const TextFieldState &) = default;
+        TextFieldState(TextFieldState &&) = default;
+        TextFieldState &operator=(const TextFieldState &) = default;
+        TextFieldState &operator=(TextFieldState &&) = default;
+        ~TextFieldState() = default;
+
+        size_t get_width() const {
+            return width;
+        }
+
+        void set_width(size_t width) {
+            this->width = width;
+        }
+
+      protected:
+        std::optional<size_t> get_view_start() const override {
+            return view_pivot;
+        }
+
+        std::optional<size_t> get_view_end() const override {
+            return view_pivot + width;
+        }
+
+        void on_cursor_change() override {
+            if (cursor < view_pivot)
+                view_pivot = cursor;
+            if (cursor + 1 >= view_pivot + width)
+                view_pivot = cursor + 1 - width;
+        }
+    };
+
     struct TextFieldInfo {
         /// Position of the text field
         Position pos = {};
@@ -2320,11 +2384,11 @@ namespace nite
         /// Cursor style in selection mode
         Style cursor_style_sel = {.bg = Color::from_hex(0x24acf2), .fg = COLOR_WHITE};
 
-        /// Handler triggered when enter is pressed (only when handle_enter_as_event is true)
+        /// Handler triggered when enter is pressed
         HandlerFn<TextFieldInfo> on_enter = {};
     };
 
-    void TextField(State &state, TextInputState &text_state, TextFieldInfo info);
+    void TextField(State &state, TextFieldState &text_state, TextFieldInfo info);
 
     enum class CheckBoxValue {
         UNCHECKED,
